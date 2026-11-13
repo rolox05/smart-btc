@@ -1,0 +1,23 @@
+{
+  "name": "smart-btc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local BTC analysis, probabilistic forecasting and backtesting workbench",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"npm run dev -w @smart-btc/server\" \"npm run dev -w @smart-btc/web\"",
+    "build": "npm run build -w @smart-btc/web",
+    "start": "npm run start -w @smart-btc/server",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7",
+    "typescript": "^7.0.2"
+  }
+}
