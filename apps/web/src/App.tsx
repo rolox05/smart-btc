@@ -1,4 +1,4 @@
-import { TF_INFO, TIMEFRAMES, type AnnotationPayload, type ForecastSettings, type RelationWindow, type Timeframe } from '@smart-btc/shared';
+import { TF_INFO, type AnnotationPayload, type ForecastSettings, type RelationWindow, type Timeframe } from '@smart-btc/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
@@ -8,6 +8,7 @@ import { DataPanel } from './components/DataPanel';
 import { ForecastPanel, ForecastSettingsBar } from './components/ForecastPanel';
 import { GuidePanel, type GuideSection } from './components/GuidePanel';
 import { Header } from './components/Header';
+import { LiquidationHeatmapView } from './components/LiquidationHeatmap';
 import { LiquidityPanel } from './components/LiquidityPanel';
 import { MetricSidebar } from './components/MetricSidebar';
 import { OddsPanel } from './components/OddsPanel';
@@ -20,6 +21,7 @@ import {
   useBacktest,
   useCandles,
   useForecast,
+  useLiquidationHeatmap,
   useLiquidity,
   useOverview,
   useRelations,
@@ -31,6 +33,25 @@ import { api } from './lib/api';
 import { type TabId, useAppState, useDebounced, useSelections } from './lib/state';
 
 // The Data tab stays reachable from the source-status button in the header.
+/**
+ * The single time selector. Each entry fixes both the bar size and how much history is on screen:
+ * the first six are one bar size each, the rest are daily bars over a longer stretch.
+ */
+const VIEWS: { id: string; tf: Timeframe; bars: number; hint: string }[] = [
+  { id: '15m', tf: '15m', bars: 288, hint: '15-minute bars, last 3 days' },
+  { id: '1h', tf: '1h', bars: 336, hint: '1-hour bars, last 2 weeks' },
+  { id: '4h', tf: '4h', bars: 540, hint: '4-hour bars, last 3 months' },
+  { id: '24h', tf: '1d', bars: 120, hint: 'Daily bars, last 4 months' },
+  { id: '1w', tf: '1w', bars: 209, hint: 'Weekly bars, last 4 years' },
+  { id: '1m', tf: '1M', bars: 0, hint: 'Monthly bars, all history' },
+  { id: '3m', tf: '1d', bars: 92, hint: 'Daily bars, last 3 months' },
+  { id: '6m', tf: '1d', bars: 183, hint: 'Daily bars, last 6 months' },
+  { id: '1y', tf: '1d', bars: 365, hint: 'Daily bars, last year' },
+  { id: '2y', tf: '1d', bars: 730, hint: 'Daily bars, last 2 years' },
+  { id: '4y', tf: '1d', bars: 1461, hint: 'Daily bars, last 4 years' },
+  { id: 'All', tf: '1d', bars: 0, hint: 'Daily bars, all history' },
+];
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'forecast', label: 'Forecast' },
   { id: 'odds', label: 'Odds' },
@@ -52,7 +73,9 @@ export default function App() {
   // Everything below (chart, metrics, forecast, backtest) is computed on the selected timeframe.
   const tf = state.settings.timeframe;
   const tfInfo = TF_INFO[tf];
-  const range = tfInfo.ranges.find((r) => r.id === state.range) ?? tfInfo.ranges.find((r) => r.id === tfInfo.defaultRange)!;
+  // The saved view must agree with the saved timeframe; if it does not (older saved state), fall back to that timeframe's view.
+  const saved = VIEWS.find((v) => v.id === state.range);
+  const view = saved && saved.tf === tf ? saved : VIEWS.find((v) => v.tf === tf)!;
   const horizon = tfInfo.horizons.includes(state.settings.horizon) ? state.settings.horizon : tfInfo.defaultHorizon;
 
   const overview = useOverview(tf);
@@ -85,6 +108,7 @@ export default function App() {
   const backtest = useBacktest(backtestReq, barVersion);
   const wantLiquidity = state.layers.swings || state.layers.liquidations || state.layers.walls || state.tab === 'liquidity';
   const liquidity = useLiquidity(wantLiquidity);
+  const heatmap = useLiquidationHeatmap(state.heatmapWindow, state.center === 'heatmap');
   const tradeReq = useDebounced(useMemo(() => ({ settings, ...state.trade, entry: 0 }), [settings, state.trade]), 350);
   const trade = useTradeSetup(tradeReq, state.tab === 'trade', priceVersion);
 
@@ -126,16 +150,19 @@ export default function App() {
     if (metricId) setGuideFocus(metricId);
     patch({ tab: 'guide' });
   };
-  // A new timeframe needs its own horizon, chart range and typical stop/target distances.
-  const setTimeframe = (next: Timeframe) => {
-    if (next === tf) return;
-    const info = TF_INFO[next];
+  // Choosing a view with another bar size also resets the horizon and the typical stop/target distances.
+  const setView = (id: string) => {
+    const next = VIEWS.find((v) => v.id === id);
+    if (!next) return;
+    if (next.tf === tf) return patch({ range: id });
+    const info = TF_INFO[next.tf];
     patch({
-      settings: { ...state.settings, timeframe: next, horizon: info.defaultHorizon },
-      range: info.defaultRange,
+      range: id,
+      settings: { ...state.settings, timeframe: next.tf, horizon: info.defaultHorizon },
       trade: { ...state.trade, ...info.bracket },
     });
   };
+  const setTimeframe = (next: Timeframe) => setView(VIEWS.find((v) => v.tf === next)!.id);
 
   const header = (
     <Header
@@ -229,23 +256,31 @@ export default function App() {
                 >
                   {collapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />} {collapsed ? 'Show metrics' : 'Hide metrics'}
                 </button>
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink2">Bitcoin</h2>
                 <Segmented
-                  label="Timeframe"
+                  label="Central panel"
                   size="sm"
-                  value={tf}
-                  onChange={setTimeframe}
-                  options={TIMEFRAMES.map((t) => ({ value: t, label: TF_INFO[t].label }))}
+                  value={state.center}
+                  onChange={(center) => patch({ center })}
+                  options={[
+                    { value: 'chart', label: 'Price chart' },
+                    { value: 'heatmap', label: 'Liquidation heatmap' },
+                  ]}
                 />
               </div>
-              <Segmented
-                label="Chart range"
-                size="sm"
-                value={range.id}
-                onChange={(id) => patch({ range: id })}
-                options={tfInfo.ranges.map((r) => ({ value: r.id, label: r.id }))}
-              />
+              {state.center === 'chart' && (
+                <div title={`${view.hint}. The first six set the bar size; 3m to All show daily bars over a longer stretch.`}>
+                  <Segmented label="Time" size="sm" value={view.id} onChange={setView} options={VIEWS.map((v) => ({ value: v.id, label: v.id }))} />
+                </div>
+              )}
             </header>
+            {state.center === 'heatmap' ? (
+              heatmap.data ? (
+                <LiquidationHeatmapView heatmap={heatmap.data} window={state.heatmapWindow} onWindow={(heatmapWindow) => patch({ heatmapWindow })} loading={heatmap.isFetching && heatmap.data.window !== state.heatmapWindow} />
+              ) : (
+                <div className="px-3">{heatmap.error ? <div className="py-4"><Note tone="error">{heatmap.error.message}</Note></div> : <Loading label="Estimating liquidation levels hour by hour…" />}</div>
+              )
+            ) : (
+            <>
             {switching && (
               <div className="border-b border-line px-3">
                 <Loading label={overview.error?.message ?? `Loading the ${tfInfo.label} timeframe…`} />
@@ -264,7 +299,7 @@ export default function App() {
                 annotationData={annotationData}
                 layers={state.layers}
                 tf={tf}
-                rangeBars={range.bars}
+                rangeBars={view.bars}
                 explain={state.explain}
               />
             ) : (
@@ -276,9 +311,11 @@ export default function App() {
                 )}
               </div>
             )}
+            </>
+            )}
           </section>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-mute">
-            Drag to pan, pinch or Ctrl/⌘ + scroll to zoom, drag the divider between panes to resize them. The timeframe applies to the chart, the price indicators and the forecast alike; on-chain and derivatives metrics are daily figures on every timeframe.
+            Drag to pan, scroll or pinch on the chart to zoom, drag the divider between panes to resize them. The time setting fixes the bar size ({tfInfo.label} now) and applies to the chart, the price indicators and the forecast alike; on-chain and derivatives metrics are daily figures on every timeframe.
             {state.explain ? ' Rest the cursor on a line, level or metric for an explanation; the "Hints" switch in the header turns this off.' : ''}
           </p>
         </div>

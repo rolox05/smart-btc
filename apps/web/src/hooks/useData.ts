@@ -1,4 +1,4 @@
-import type { BacktestRequest, ForecastSettings, RelationWindow, Timeframe, TradeSetupRequest } from '@smart-btc/shared';
+import type { BacktestRequest, ForecastSettings, HeatmapWindow, RelationWindow, Timeframe, TradeSetupRequest } from '@smart-btc/shared';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '../lib/api';
 
@@ -29,6 +29,17 @@ export const useSeries = (tf: Timeframe, ids: string[]) =>
 
 export const useLiquidity = (enabled = true) =>
   useQuery({ queryKey: ['liquidity'], queryFn: api.liquidity, refetchInterval: 60_000, enabled, retry, retryDelay });
+
+export const useLiquidationHeatmap = (window: HeatmapWindow, enabled: boolean) =>
+  useQuery({
+    queryKey: ['liquidation-heatmap', window],
+    queryFn: () => api.liquidationHeatmap(window),
+    refetchInterval: 120_000,
+    enabled,
+    placeholderData: keepPreviousData,
+    retry,
+    retryDelay,
+  });
 
 /** Payloads of the given chart annotations; entries are undefined while loading. */
 export const useAnnotations = (tf: Timeframe, ids: string[], dataVersion: number | undefined) =>

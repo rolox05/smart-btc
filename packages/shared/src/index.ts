@@ -315,6 +315,33 @@ export interface LiquidityReport {
   };
 }
 
+/**
+ * Estimated liquidation levels through time: for every hour, how much leveraged notional would be
+ * force-closed at each price. A level appears when positions are opened and disappears once price trades through it.
+ */
+export const HEATMAP_WINDOWS = ['12h', '24h', '48h', '3d', '1w', '2w', '1m', '3m', '6m', '1y', '2y', '3y', '4y', 'All'] as const;
+export type HeatmapWindow = (typeof HEATMAP_WINDOWS)[number];
+
+export interface LiquidationHeatmap {
+  at: number;
+  window: HeatmapWindow;
+  /** Bar size the map is drawn at for this window. */
+  timeframe: Timeframe;
+  /** Column times (bar opens, unix seconds). */
+  t: number[];
+  /** Price of the lower edge of row 0, and the height of one row, in USD. */
+  priceMin: number;
+  priceStep: number;
+  rows: number;
+  /** rows × cols intensities 0-255, row-major from the lowest price row, base64-encoded. */
+  data: string;
+  /** Estimated notional (USD) represented by intensity 255. */
+  maxUsd: number;
+  /** Candles for the same columns. */
+  candles: Candle[];
+  notes: string[];
+}
+
 // ───────────────────────── forecast ─────────────────────────
 
 export interface ForecastSettings {

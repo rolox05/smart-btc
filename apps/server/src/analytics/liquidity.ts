@@ -1,4 +1,4 @@
-import type { Candle, DepthBucket, LiquidityLevel, LiquidityReport } from '@smart-btc/shared';
+import type { Candle, DepthBucket, HeatmapWindow, LiquidationHeatmap, LiquidityLevel, LiquidityReport } from '@smart-btc/shared';
 import { fetchJson, fetchJsonAny, ttlCache } from '../lib/http.js';
 import { BINANCE_FUTURES, BINANCE_SPOT_HOSTS, fetchKlines } from '../providers/binance.js';
 import type { Dataset } from './dataset.js';
@@ -308,6 +308,139 @@ const loadMarket = ttlCache(45_000, async () => {
   ]);
   return { books, h4, h1, oi };
 });
+
+// ───────────────────────── liquidation heatmap ─────────────────────────
+
+const HEAT_ROWS = 240;
+
+/**
+ * Notional opened per hour: positive open-interest change where Binance reports it, otherwise traded
+ * volume scaled by the observed ratio of OI growth to volume.
+ */
+function openedPerHour(hourly: Candle[], oi: { t: number; usd: number }[]): Float64Array {
+  const n = hourly.length;
+  const oiAt = new Map(oi.map((r) => [Math.floor(r.t / 3600) * 3600, r.usd]));
+  const opened = new Float64Array(n).fill(NaN);
+  let sumOpened = 0;
+  let sumVol = 0;
+  for (let i = 1; i < n; i++) {
+    const a = oiAt.get(hourly[i].t);
+    const b = oiAt.get(hourly[i].t + 3600);
+    if (a != null && b != null) {
+      opened[i] = Math.max(0, b - a);
+      sumOpened += opened[i];
+      sumVol += hourly[i].v * hourly[i].c;
+    }
+  }
+  const ratio = sumVol > 0 ? sumOpened / sumVol : 0.05;
+  for (let i = 0; i < n; i++) if (Number.isNaN(opened[i])) opened[i] = hourly[i].v * hourly[i].c * ratio;
+  return opened;
+}
+
+/** Bar size and number of columns used for each heatmap window. */
+const HEAT_WINDOWS: Record<HeatmapWindow, { tf: '15m' | '1h' | '4h' | '1d' | '1w'; cols: number }> = {
+  '12h': { tf: '15m', cols: 48 },
+  '24h': { tf: '15m', cols: 96 },
+  '48h': { tf: '15m', cols: 192 },
+  '3d': { tf: '15m', cols: 288 },
+  '1w': { tf: '1h', cols: 168 },
+  '2w': { tf: '1h', cols: 336 },
+  '1m': { tf: '1h', cols: 720 },
+  '3m': { tf: '4h', cols: 540 },
+  '6m': { tf: '4h', cols: 1095 },
+  '1y': { tf: '1d', cols: 365 },
+  '2y': { tf: '1d', cols: 730 },
+  '3y': { tf: '1d', cols: 1095 },
+  '4y': { tf: '1d', cols: 1461 },
+  All: { tf: '1d', cols: 100_000 },
+};
+/** Positions are assumed to be closed over time with this half life. */
+const HALF_LIFE_SEC = 10 * 86_400;
+/** History replayed before the window starts, so that levels opened earlier are already on the map. */
+const WARMUP_SEC = 45 * 86_400;
+
+/**
+ * The liquidation estimate replayed bar by bar over the chosen window. Positions opened in a bar put a
+ * liquidation level on the map for each leverage tier; the level stays (fading as positions get closed)
+ * until price trades through it.
+ */
+export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset): Promise<LiquidationHeatmap> {
+  const spec = HEAT_WINDOWS[window];
+  const first = Math.max(0, ds.n - spec.cols);
+  const start = Math.max(0, first - Math.ceil(WARMUP_SEC / ds.barSec));
+  const n = ds.n - start;
+  const cols = ds.n - first;
+
+  // New leverage per dollar traded, calibrated on the hours for which Binance reports open interest.
+  const { h1, oi } = await loadMarket();
+  const openedH = openedPerHour(h1, oi);
+  let sumOpened = 0;
+  let sumVol = 0;
+  for (let i = 0; i < h1.length; i++) {
+    sumOpened += openedH[i];
+    sumVol += h1[i].v * h1[i].c;
+  }
+  const ratio = sumVol > 0 ? sumOpened / sumVol : 0.05;
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = first; i < ds.n; i++) {
+    lo = Math.min(lo, ds.l[i]);
+    hi = Math.max(hi, ds.h[i]);
+  }
+  const priceMin = lo * 0.8;
+  const priceStep = (hi * 1.2 - priceMin) / HEAT_ROWS;
+  const grid = new Float64Array(HEAT_ROWS * cols);
+  const decayPerBar = Math.pow(0.5, ds.barSec / HALF_LIFE_SEC);
+
+  for (let a = 0; a < n; a++) {
+    const i = start + a;
+    const entry = (ds.h[i] + ds.l[i] + ds.c[i]) / 3;
+    const openedUsd = ds.v[i] * ds.c[i] * ratio;
+    for (const [lev, share] of LEVERAGE_MIX) {
+      for (const side of [-1, 1] as const) {
+        // side -1: longs, liquidated below entry; side +1: shorts, liquidated above.
+        const level = entry * (1 + side * (1 / lev - MAINT_MARGIN));
+        const row = Math.floor((level - priceMin) / priceStep);
+        if (row < 0 || row >= HEAT_ROWS) continue;
+        let usd = openedUsd * 0.5 * share;
+        for (let j = i + 1; j < ds.n; j++) {
+          if (side < 0 ? ds.l[j] <= level : ds.h[j] >= level) break;
+          usd *= decayPerBar;
+          if (j >= first) grid[row * cols + (j - first)] += usd;
+        }
+      }
+    }
+  }
+
+  // Scale to the 99.5th percentile of non-empty cells so a single spike does not wash out the rest.
+  const nonZero = Array.from(grid).filter((x) => x > 0).sort((p, q) => p - q);
+  const maxUsd = nonZero.length ? nonZero[Math.floor(nonZero.length * 0.995)] : 1;
+  const bytes = Buffer.alloc(grid.length);
+  for (let k = 0; k < grid.length; k++) bytes[k] = Math.min(255, Math.round((grid[k] / maxUsd) * 255));
+
+  const candles: Candle[] = [];
+  for (let i = first; i < ds.n; i++) candles.push({ t: ds.t[i], o: ds.o[i], h: ds.h[i], l: ds.l[i], c: ds.c[i], v: ds.v[i] });
+
+  return {
+    at: Date.now(),
+    window,
+    timeframe: spec.tf,
+    t: ds.t.slice(first),
+    priceMin,
+    priceStep,
+    rows: HEAT_ROWS,
+    data: bytes.toString('base64'),
+    maxUsd,
+    candles,
+    notes: [
+      'An estimate, not exchange data: new positions are inferred from traded volume, scaled by how much Binance open interest has recently grown per dollar traded, then split evenly between longs and shorts and across an assumed leverage mix of 5× to 100×.',
+      'A level disappears when price trades through it and fades with a 10-day half life as positions are closed. The 45 days before the window are replayed first, so levels opened earlier are already on the map.',
+    ],
+  };
+}
+
+export const HEATMAP_TIMEFRAME = (window: HeatmapWindow) => HEAT_WINDOWS[window].tf;
 
 export async function liquidityReport(ds: Dataset): Promise<LiquidityReport> {
   const { books, h4, h1, oi } = await loadMarket();

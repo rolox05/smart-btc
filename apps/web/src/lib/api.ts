@@ -1,4 +1,6 @@
 import type {
+  HeatmapWindow,
+  LiquidationHeatmap,
   AnnotationPayload,
   RelationWindow,
   Relations,
@@ -51,6 +53,7 @@ export const api = {
   candles: (tf: Timeframe) => call<Candle[]>(`/api/candles?tf=${tf}`),
   series: (tf: Timeframe, ids: string[]) => call<SeriesPayload>(`/api/series?tf=${tf}&ids=${ids.join(',')}`),
   liquidity: () => call<LiquidityReport>('/api/liquidity'),
+  liquidationHeatmap: (window: HeatmapWindow) => call<LiquidationHeatmap>(`/api/liquidation-heatmap?window=${window}`),
   annotation: (tf: Timeframe, id: string) => call<AnnotationPayload>(`/api/annotations/${encodeURIComponent(id)}?tf=${tf}`),
   relations: (tf: Timeframe, window: RelationWindow, horizon: number, startYear: number) =>
     call<Relations>(`/api/relations?tf=${tf}&window=${window}&horizon=${horizon}&startYear=${startYear}`),

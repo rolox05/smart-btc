@@ -1,4 +1,4 @@
-import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings, type MetricDef } from '@smart-btc/shared';
+import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings, type HeatmapWindow, type MetricDef } from '@smart-btc/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type TabId = 'forecast' | 'odds' | 'trade' | 'backtest' | 'ranking' | 'liquidity' | 'guide' | 'data';
@@ -10,6 +10,8 @@ export interface Layers {
   liquidations: boolean;
   walls: boolean;
   logScale: boolean;
+  /** Traded volume as bars along the bottom of the price pane. */
+  volume: boolean;
 }
 
 export interface TradeForm {
@@ -31,8 +33,12 @@ export interface AppState {
   annotations: string[];
   settings: Omit<ForecastSettings, 'features'>;
   layers: Layers;
-  /** Chart range id, one of the ranges of the current timeframe. */
+  /** Selected time view (one of VIEWS in App): it sets both the bar size and the stretch of history shown. */
   range: string;
+  /** What the central panel shows. */
+  center: 'chart' | 'heatmap';
+  /** Stretch of history shown on the liquidation heatmap. */
+  heatmapWindow: HeatmapWindow;
   /** Show explanations when hovering metrics and chart lines. */
   explain: boolean;
   /** Hide the metrics panel to give the chart and the forecast the full width. */
@@ -49,8 +55,10 @@ export const DEFAULT_STATE: AppState = {
   model: null,
   annotations: [],
   settings: baseSettings,
-  layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false },
-  range: '1Y',
+  layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false, volume: true },
+  range: '1y',
+  center: 'chart',
+  heatmapWindow: '2w',
   explain: true,
   sidebarCollapsed: false,
   tab: 'forecast',

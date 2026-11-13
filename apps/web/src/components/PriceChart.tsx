@@ -18,6 +18,7 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
+  HistogramSeries,
   LineSeries,
   LineStyle,
   PriceScaleMode,
@@ -91,6 +92,7 @@ type Refs = {
   candle: ISeriesApi<'Candlestick'>;
   lines: Map<string, ISeriesApi<'Line'>>;
   cone: ISeriesApi<'Line'>[];
+  volume: ISeriesApi<'Histogram'> | null;
   priceLines: IPriceLine[];
   annots: Map<string, { bullish: ISeriesApi<'Line'>; bearish: ISeriesApi<'Line'>; markers: ISeriesMarkersPluginApi<Time> }>;
 };
@@ -118,6 +120,8 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   const refs = useRef<Refs | null>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
   const [paneTops, setPaneTops] = useState<number[]>([0]);
+  // False while the chart has no width (e.g. it was created in a hidden tab); the range is applied once it does.
+  const [sized, setSized] = useState(false);
   const [tip, setTip] = useState<(Tip & { x: number; y: number }) | null>(null);
   // What each drawn object means, looked up when the chart reports the object under the cursor.
   const tips = useRef({ series: new Map<unknown, Tip>(), objects: new Map<string, Tip>() });
@@ -141,7 +145,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   // Annotations only exist on the chart while their metric's pane is shown.
   const activeAnnots = annotationDefs.filter((a) => panes.some((p) => p.metrics.some((m) => m.id === a.metricId)));
   const annotKey = activeAnnots.map((a) => a.id).join(',');
-  const structureKey = `${overlays.map((m) => m.id).join(',')}|${panes.map((p) => `${p.id}:${p.metrics.map((m) => m.id).join('+')}`).join(',')}|${layers.cone}|${annotKey}|${tf}`;
+  const structureKey = `${overlays.map((m) => m.id).join(',')}|${panes.map((p) => `${p.id}:${p.metrics.map((m) => m.id).join('+')}`).join(',')}|${layers.cone}|${layers.volume}|${annotKey}|${tf}`;
   const height = MAIN_HEIGHT + panes.length * PANE_HEIGHT;
 
   // ── build the chart skeleton whenever the set of visible series changes ──
@@ -176,7 +180,15 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
     });
 
+    // Volume sits on its own hidden scale in the bottom fifth of the price pane, behind the candles' range.
+    let volume: ISeriesApi<'Histogram'> | null = null;
+    if (layers.volume) {
+      volume = chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false });
+      chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
+    }
+
     const seriesTips = new Map<unknown, Tip>();
+    if (volume) seriesTips.set(volume, { title: 'Volume', text: 'BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.' });
     const objectTips = new Map<string, Tip>();
     const metricTip = (m: MetricDef): Tip => ({ title: m.name, text: [m.description, m.guide?.read[0]].filter(Boolean).join(' ') });
 
@@ -322,17 +334,13 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
         : null;
       setTip((prev) => (found ? { ...found, x: cursor.x, y: cursor.y } : prev ? null : prev));
     });
-    const ro = new ResizeObserver(() => requestAnimationFrame(measure));
+    const ro = new ResizeObserver(([entry]) => {
+      setSized(entry.contentRect.width > 0);
+      requestAnimationFrame(measure);
+    });
     ro.observe(el.current);
 
-    // A plain wheel scrolls the page (the chart is tall); zooming needs Ctrl/Cmd or a trackpad pinch,
-    // and a sideways swipe pans. Intercept in the capture phase so the chart never sees plain wheels.
     const host = el.current;
-    const onWheel = (e: WheelEvent) => {
-      const zoomIntent = e.ctrlKey || e.metaKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (!zoomIntent) e.stopPropagation();
-    };
-    host.addEventListener('wheel', onWheel, { capture: true, passive: true });
     const onMove = (e: MouseEvent) => {
       const box = host.getBoundingClientRect();
       cursor.x = e.clientX - box.left;
@@ -343,10 +351,9 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     host.addEventListener('mouseleave', onLeave);
     requestAnimationFrame(measure);
 
-    refs.current = { chart, candle, lines, cone, priceLines: [], annots };
+    refs.current = { chart, candle, lines, cone, volume, priceLines: [], annots };
     return () => {
       ro.disconnect();
-      host.removeEventListener('wheel', onWheel, { capture: true });
       host.removeEventListener('mousemove', onMove, { capture: true });
       host.removeEventListener('mouseleave', onLeave);
       refs.current = null;
@@ -361,6 +368,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     const r = refs.current;
     if (!r || candles.length === 0) return;
     r.candle.setData(candles.map((c) => ({ time: c.t as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c })));
+    r.volume?.setData(candles.map((c) => ({ time: c.t as UTCTimestamp, value: c.v, color: c.c >= c.o ? 'rgba(31,169,122,0.45)' : 'rgba(226,92,92,0.45)' })));
   }, [candles, structureKey]);
 
   useEffect(() => {
@@ -461,7 +469,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   const nBars = candles.length;
   useEffect(() => {
     const r = refs.current;
-    if (!r || !lastT) return;
+    if (!r || !lastT || !sized) return;
     const from = rangeBars > 0 ? candles[Math.max(0, nBars - rangeBars)].t : firstT;
     // Leave room on the right for the forecast cone, or a few empty bars without it.
     const to = addBars(tf, lastT, Math.max(horizon, Math.ceil((rangeBars || nBars) * 0.03)) + 2);
@@ -475,7 +483,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     });
     return () => cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeBars, lastT, firstT, nBars, horizon, structureKey, seriesReady, tf]);
+  }, [rangeBars, lastT, firstT, nBars, horizon, structureKey, seriesReady, tf, sized]);
 
   useEffect(() => {
     refs.current?.candle.priceScale().applyOptions({
@@ -583,6 +591,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
                 <span>H {fmtUsd(Math.max(bar.h, liveClose ?? bar.h))}</span>
                 <span>L {fmtUsd(Math.min(bar.l, liveClose ?? bar.l))}</span>
                 <span>C {fmtUsd(liveClose)}</span>
+                {layers.volume && <span>Vol {bar.v >= 1000 ? `${(bar.v / 1000).toFixed(1)}K` : bar.v.toFixed(0)} BTC</span>}
                 {prev && liveClose != null && (
                   <span className={liveClose >= prev.c ? 'text-up' : 'text-down'}>{fmtPct((liveClose / prev.c - 1) * 100, 2)}</span>
                 )}

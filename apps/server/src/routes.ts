@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  HEATMAP_WINDOWS,
   TIMEFRAMES,
   type BacktestRequest,
   type BacktestResult,
@@ -12,7 +13,7 @@ import {
 } from '@smart-btc/shared';
 import { type Dataset, type DatasetService, snapshot } from './analytics/dataset.js';
 import { ANNOTATIONS, buildAnnotation } from './analytics/divergence.js';
-import { liquidityReport } from './analytics/liquidity.js';
+import { HEATMAP_TIMEFRAME, liquidationHeatmap, liquidityReport } from './analytics/liquidity.js';
 import { metricsFor } from './analytics/metrics.js';
 import { buildRelations } from './analytics/relations.js';
 import { PreparedCache } from './forecast/analog.js';
@@ -181,6 +182,13 @@ export function registerRoutes(app: FastifyInstance, datasets: DatasetService, s
 
   // Liquidity does not depend on the chart timeframe: it always reads daily and 4h swings plus live books.
   app.get('/api/liquidity', async () => liquidityReport(await dataset()));
+
+  app.get('/api/liquidation-heatmap', async (req) => {
+    const { window } = z.object({ window: z.enum(HEATMAP_WINDOWS).default('2w') }).parse(req.query);
+    const ds = await dataset(HEATMAP_TIMEFRAME(window));
+    // One build per window and per data update; the still-open bar changes little within that.
+    return results.get(`h:${ds.version}:${window}`, () => liquidationHeatmap(window, ds));
+  });
 
   app.get('/api/annotations/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
