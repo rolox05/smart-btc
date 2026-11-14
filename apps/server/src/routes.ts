@@ -14,7 +14,8 @@ import {
 import { type Dataset, type DatasetService, snapshot } from './analytics/dataset.js';
 import { annotationsFor, buildAnnotation } from './analytics/divergence.js';
 import { langOf, makeT, type T } from './i18n/index.js';
-import { HEATMAP_TIMEFRAME, liquidationHeatmap, liquidityReport } from './analytics/liquidity.js';
+import { HEATMAP_TIMEFRAME, liquidationHeatmap } from './analytics/liquidationHeatmap.js';
+import { liquidityReport } from './analytics/liquidity.js';
 import { metricsFor } from './analytics/metrics.js';
 import { buildRelations } from './analytics/relations.js';
 import { PreparedCache } from './forecast/analog.js';

@@ -5,6 +5,7 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { type CSSProperties, useMemo, useState } from 'react';
 import { BacktestPanel } from './components/BacktestPanel';
 import { DataPanel } from './components/DataPanel';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ForecastPanel, ForecastSettingsBar } from './components/ForecastPanel';
 import { GuidePanel, type GuideSection } from './components/GuidePanel';
 import { Header } from './components/Header';
@@ -222,6 +223,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const forecastOk = forecast.data && !forecast.error && forecast.data.settings.timeframe === tf ? forecast.data : undefined;
   const noInputs = model.length === 0;
   const collapsed = state.sidebarCollapsed;
+  const boundary = { title: t('This panel could not be displayed'), retryLabel: t('Try again') };
   const widths = state.panelWidths;
   const setWidth = (side: 'left' | 'right', w: number | null) => patch({ panelWidths: { ...widths, [side]: w } });
   // Dragged widths override the per-breakpoint defaults that the grid classes fall back to.
@@ -250,6 +252,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
         {!collapsed && (
         <div className="relative order-3 min-w-0 md:col-start-1 md:row-start-2 wide:sticky wide:top-[60px] wide:row-span-2 wide:row-start-1">
           <div className="thin-scroll wide:max-h-[calc(100vh-72px)] wide:overflow-y-auto">
+          <ErrorBoundary {...boundary} resetKey={tf}>
           <MetricSidebar
             metrics={ov.metrics}
             annotations={ov.annotations}
@@ -267,6 +270,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             explain={state.explain}
             onResetSelections={() => patch({ visible: null, model: null })}
           />
+          </ErrorBoundary>
           </div>
           <ResizeHandle
             edge="right"
@@ -305,11 +309,12 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
                 />
               </div>
               {state.center === 'chart' && (
-                <div title={t('{hint}. The first six set the bar size; 3m to All show daily bars over a longer stretch.', { hint: t(view.hint) })}>
+                <div className="thin-scroll max-w-full overflow-x-auto" title={t('{hint}. The first six set the bar size; 3m to All show daily bars over a longer stretch.', { hint: t(view.hint) })}>
                   <Segmented label={t('Time')} size="sm" value={view.id} onChange={setView} options={VIEWS.map((v) => ({ value: v.id, label: v.id === 'All' ? t('All') : v.id }))} />
                 </div>
               )}
             </header>
+            <ErrorBoundary {...boundary} resetKey={`${state.center}:${tf}:${state.heatmapWindow}`}>
             {state.center === 'heatmap' ? (
               heatmap.data ? (
                 <LiquidationHeatmapView heatmap={heatmap.data} window={state.heatmapWindow} onWindow={(heatmapWindow) => patch({ heatmapWindow })} loading={heatmap.isFetching && heatmap.data.window !== state.heatmapWindow} />
@@ -350,6 +355,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             )}
             </>
             )}
+            </ErrorBoundary>
           </section>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-mute">
             {t('Drag to pan, scroll or pinch on the chart to zoom, drag the divider between panes to resize them. The time setting fixes the bar size ({tf} now) and applies to the chart, the price indicators and the forecast alike; on-chain and derivatives metrics are daily figures on every timeframe.', { tf: tfInfo.label })}
@@ -393,6 +399,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             ))}
           </div>
 
+          <ErrorBoundary {...boundary} resetKey={`${state.tab}:${tf}`}>
           {noInputs && state.tab !== 'liquidity' && state.tab !== 'data' && state.tab !== 'guide' ? (
             <Note tone="warn">{t('No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.')}</Note>
           ) : (
@@ -447,6 +454,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             />
           )}
           {state.tab === 'data' && <DataPanel overview={ov} onRefresh={() => refresh.mutate()} refreshing={refresh.isPending} />}
+          </ErrorBoundary>
         </div>
         </div>
       </main>

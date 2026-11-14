@@ -372,6 +372,8 @@ T = {
     'Heatmap window': ('Periodo del mapa de calor', 'Janela do mapa de calor'),
     'Heatmap of estimated liquidation levels by price and time, with candles': ('Mapa de calor de niveles de liquidación estimados por precio y tiempo, con velas', 'Mapa de calor de níveis de liquidação estimados por preço e tempo, com barras'),
     'Est. liquidations': ('Liquidaciones est.', 'Liquidações est.'),
+    'Try again': ('Reintentar', 'Tentar novamente'),
+    'This panel could not be displayed': ('No se pudo mostrar este panel', 'Não foi possível exibir este painel'),
     'ATR': ('ATR', 'ATR'),
     'ATR multiple': ('Múltiplo de ATR', 'Múltiplo de ATR'),
     'Average loss in the worst tail beyond the VaR: what a bad case actually costs on average.': ('Pérdida media en la cola peor, más allá del VaR: lo que cuesta de media un mal escenario.', 'Perda média na pior cauda, além do VaR: quanto custa em média um cenário ruim.'),

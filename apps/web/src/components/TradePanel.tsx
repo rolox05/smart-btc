@@ -86,7 +86,7 @@ export function TradePanel({
                 hint={t('Stop distance in average true ranges of one bar. Volatility-based stops widen in turbulent markets and tighten in calm ones; 1.5-3× ATR is the usual range.')}
               />
             ) : (
-              <NumberField label="" value={form.stopPct} min={0.05} max={50} step={form.stopPct < 2 ? 0.1 : 0.5} suffix="%" onChange={(v) => set('stopPct', v)} />
+              <NumberField label="" ariaLabel={t('Stop-loss')} value={form.stopPct} min={0.05} max={50} step={form.stopPct < 2 ? 0.1 : 0.5} suffix="%" onChange={(v) => set('stopPct', v)} />
             )}
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
@@ -106,7 +106,7 @@ export function TradePanel({
                 hint={t('Target distance as a multiple of the stop distance (R). At 2R a win pays twice what a loss costs, so you break even winning a third of the time.')}
               />
             ) : (
-              <NumberField label="" value={form.takePct} min={0.05} max={200} step={form.takePct < 2 ? 0.1 : 0.5} suffix="%" onChange={(v) => set('takePct', v)} />
+              <NumberField label="" ariaLabel={t('Take-profit')} value={form.takePct} min={0.05} max={200} step={form.takePct < 2 ? 0.1 : 0.5} suffix="%" onChange={(v) => set('takePct', v)} />
             )}
           </div>
         </div>

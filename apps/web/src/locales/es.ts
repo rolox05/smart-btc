@@ -352,6 +352,8 @@ const dict: Dict = {
   "Heatmap window": "Periodo del mapa de calor",
   "Heatmap of estimated liquidation levels by price and time, with candles": "Mapa de calor de niveles de liquidación estimados por precio y tiempo, con velas",
   "Est. liquidations": "Liquidaciones est.",
+  "Try again": "Reintentar",
+  "This panel could not be displayed": "No se pudo mostrar este panel",
   "ATR": "ATR",
   "ATR multiple": "Múltiplo de ATR",
   "Average loss in the worst tail beyond the VaR: what a bad case actually costs on average.": "Pérdida media en la cola peor, más allá del VaR: lo que cuesta de media un mal escenario.",

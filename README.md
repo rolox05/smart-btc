@@ -155,6 +155,21 @@ apps/web
   Postgres/TimescaleDB; the API is stateless apart from in-memory caches; the forecast and backtest
   functions are pure and can move to worker threads or a job queue unchanged.
 
+## Quality checks
+
+```bash
+npm run check   # typecheck + tests + translation coverage: run before committing
+npm test        # model tests only (apps/server/test)
+npm run bench   # walk-forward comparison of model variants on your local data
+```
+
+The tests run on a seeded synthetic price history, so they need neither the network nor the local
+database. They cover the statistics (weighted quantiles, the independent sample count), the
+no-lookahead guarantee (rewriting every bar after a date must not change the analogs or the
+volatility estimates at that date), end-to-end sanity (probabilities sum to one, wider confidence
+means wider bands, no claimed edge on a pure random walk) and the trade maths (Kelly sizing against
+the textbook value, Value at Risk vs Expected Shortfall, ATR and R-multiple brackets, position size).
+
 ## Known limits of this first version
 
 - Daily resolution only. Intraday stop/target ordering is unknown, so a day that touches both

@@ -1,12 +1,11 @@
 import type { KellySizing, RiskStats, TradeGridCell, TradeOutcome, TradeSetupRequest, TradeSetupResult } from '@smart-btc/shared';
 import { weightedQuantiles } from './stats.js';
 import type { Dataset } from '../analytics/dataset.js';
+import { MAINT_MARGIN, liquidationPrice as liqPrice } from '../analytics/leverage.js';
 import type { Prepared } from './analog.js';
 import { forecastContext, type Sample } from './forecast.js';
 import { EN, type T } from '../i18n/index.js';
 
-/** Maintenance margin assumed for the liquidation estimate (isolated margin, lowest tier). */
-const MAINT_MARGIN = 0.005;
 
 interface SimCosts {
   feePct: number;
@@ -19,7 +18,7 @@ interface SimCosts {
  * Bars cannot tell which level was hit first when both trade inside the same bar,
  * so that case is counted as a stop: the pessimistic reading.
  */
-function simulate(
+export function simulate(
   prep: Prepared,
   s: Sample,
   side: 'long' | 'short',
@@ -90,7 +89,7 @@ function simulate(
  * maximises expected log growth, Σ p·ln(1 + f·x), with x the outcome in R (target, stop, or the average
  * result at the horizon) after costs. Full Kelly is very volatile, which is why traders use a fraction.
  */
-function kellySizing(o: TradeOutcome, stopPct: number, takePct: number, fraction: number): KellySizing {
+export function kellySizing(o: TradeOutcome, stopPct: number, takePct: number, fraction: number): KellySizing {
   const costR = Math.max(0, o.evPct / stopPct - o.evR);
   const outcomes: [number, number][] = [
     [o.pTake, takePct / stopPct - costR],
@@ -115,7 +114,7 @@ function kellySizing(o: TradeOutcome, stopPct: number, takePct: number, fraction
  * Value at Risk, Expected Shortfall and adverse excursion over the horizon from the modelled paths,
  * holding the position without a stop: the tail the stop is there to cut off.
  */
-function riskStats(prep: Prepared, s: Sample, side: 'long' | 'short', confidence: number, stopPct: number, notional: number): RiskStats {
+export function riskStats(prep: Prepared, s: Sample, side: 'long' | 'short', confidence: number, stopPct: number, notional: number): RiskStats {
   const { logC, logH, logL, H } = prep;
   const n = s.idx.length;
   const loss = new Float64Array(n);
@@ -192,7 +191,7 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
     }
   }
 
-  const liquidationPrice = entry * (1 - dir * (1 / req.leverage - MAINT_MARGIN));
+  const liquidationPrice = liqPrice(entry, req.leverage, req.side);
   const stopPrice = entry * (1 - dir * stopFrac);
   const takePrice = entry * (1 + dir * takeFrac);
   const maxSafeLeverage = Math.max(1, Math.floor(1 / (stopFrac + MAINT_MARGIN + 0.005)));

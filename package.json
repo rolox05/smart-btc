@@ -16,7 +16,10 @@
     "start": "npm run start -w @smart-btc/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "i18n:build": "python3 scripts/i18n/build.py",
-    "i18n:check": "node scripts/i18n-keys.mjs"
+    "i18n:check": "node scripts/i18n-keys.mjs",
+    "test": "npm run test -w @smart-btc/server",
+    "bench": "tsx scripts/model-bench.mts",
+    "check": "npm run typecheck && npm test && npm run i18n:check"
   },
   "devDependencies": {
     "concurrently": "^10.0.7",

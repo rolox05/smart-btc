@@ -174,7 +174,9 @@ export function NumberField({
   step = 1,
   suffix,
   hint,
+  ariaLabel,
 }: {
+  /** Visible caption; pass '' with `ariaLabel` when a heading next to the field already names it. */
   label: string;
   value: number;
   onChange: (v: number) => void;
@@ -183,14 +185,16 @@ export function NumberField({
   step?: number;
   suffix?: string;
   hint?: string;
+  ariaLabel?: string;
 }) {
   return (
     <label className="block min-w-0" title={hint}>
-      <span className="mb-1 block truncate text-[10px] uppercase tracking-wider text-mute">{label}</span>
+      {label && <span className="mb-1 block truncate text-[10px] uppercase tracking-wider text-mute">{label}</span>}
       <span className="flex items-center rounded-md border border-line bg-bg focus-within:border-accent">
         <input
           type="number"
           className="num w-full min-w-0 bg-transparent px-2 py-1 text-xs text-ink outline-none"
+          aria-label={ariaLabel ?? label}
           value={Number.isFinite(value) ? value : ''}
           min={min}
           max={max}
