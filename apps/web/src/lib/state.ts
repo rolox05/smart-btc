@@ -45,6 +45,8 @@ export interface AppState {
   explain: boolean;
   /** Hide the metrics panel to give the chart and the forecast the full width. */
   sidebarCollapsed: boolean;
+  /** Widths (px) the side panels were dragged to; null = the default for the screen size. */
+  panelWidths: { left: number | null; right: number | null };
   tab: TabId;
   trade: TradeForm;
   backtest: { stepBars: number; touchPct: number };
@@ -64,6 +66,7 @@ export const DEFAULT_STATE: AppState = {
   heatmapWindow: '2w',
   explain: true,
   sidebarCollapsed: false,
+  panelWidths: { left: null, right: null },
   tab: 'forecast',
   trade: { side: 'long', stopPct: 5, takePct: 10, leverage: 3, accountUsd: 10_000, riskPct: 1, feeBps: 5 },
   backtest: { stepBars: 3, touchPct: 0 },
@@ -91,6 +94,7 @@ function load(): AppState {
       settings: pick(DEFAULT_STATE.settings, saved.settings),
       layers: pick(DEFAULT_STATE.layers, saved.layers),
       trade: pick(DEFAULT_STATE.trade, saved.trade),
+      panelWidths: pick(DEFAULT_STATE.panelWidths, saved.panelWidths),
       // States saved before timeframes existed scored a fixed 10% touch level; start those on "automatic".
       backtest: saved.backtest && 'stepBars' in saved.backtest ? pick(DEFAULT_STATE.backtest, saved.backtest) : DEFAULT_STATE.backtest,
     };

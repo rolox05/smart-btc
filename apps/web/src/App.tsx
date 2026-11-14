@@ -2,7 +2,7 @@ import { TF_INFO, type AnnotationPayload, type ForecastSettings, type RelationWi
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type CSSProperties, useMemo, useState } from 'react';
 import { BacktestPanel } from './components/BacktestPanel';
 import { DataPanel } from './components/DataPanel';
 import { ForecastPanel, ForecastSettingsBar } from './components/ForecastPanel';
@@ -14,6 +14,7 @@ import { MetricSidebar } from './components/MetricSidebar';
 import { OddsPanel } from './components/OddsPanel';
 import { PriceChart } from './components/PriceChart';
 import { RankingPanel } from './components/RankingPanel';
+import { ResizeHandle } from './components/ResizeHandle';
 import { TradePanel } from './components/TradePanel';
 import { Async, Loading, Note, Segmented } from './components/ui';
 import {
@@ -221,6 +222,13 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const forecastOk = forecast.data && !forecast.error && forecast.data.settings.timeframe === tf ? forecast.data : undefined;
   const noInputs = model.length === 0;
   const collapsed = state.sidebarCollapsed;
+  const widths = state.panelWidths;
+  const setWidth = (side: 'left' | 'right', w: number | null) => patch({ panelWidths: { ...widths, [side]: w } });
+  // Dragged widths override the per-breakpoint defaults that the grid classes fall back to.
+  const gridVars = {
+    ...(widths.left != null ? { '--panel-left': `${widths.left}px` } : {}),
+    ...(widths.right != null ? { '--panel-right': `${widths.right}px` } : {}),
+  } as CSSProperties;
 
   return (
     <div className="min-h-screen">
@@ -229,14 +237,19 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
       {/* From tablet width up the forecast always has the right-hand column. The metrics panel sits beside the chart
           on wide screens and under it on medium ones, and can be collapsed to hand its space to the chart. */}
       <main
+        data-resizable-grid
+        style={gridVars}
         className={clsx(
-          'mx-auto grid max-w-[1900px] grid-cols-1 items-start gap-3 p-3 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_380px]',
-          collapsed ? 'wide:grid-cols-[minmax(0,1fr)_420px] xwide:grid-cols-[minmax(0,1fr)_450px]' : 'wide:grid-cols-[250px_minmax(0,1fr)_400px] xwide:grid-cols-[270px_minmax(0,1fr)_450px]',
+          'mx-auto grid max-w-[1900px] grid-cols-1 items-start gap-3 p-3 md:grid-cols-[minmax(0,1fr)_var(--panel-right,340px)] lg:grid-cols-[minmax(0,1fr)_var(--panel-right,380px)]',
+          collapsed
+            ? 'wide:grid-cols-[minmax(0,1fr)_var(--panel-right,420px)] xwide:grid-cols-[minmax(0,1fr)_var(--panel-right,450px)]'
+            : 'wide:grid-cols-[var(--panel-left,250px)_minmax(0,1fr)_var(--panel-right,400px)] xwide:grid-cols-[var(--panel-left,270px)_minmax(0,1fr)_var(--panel-right,450px)]',
         )}
       >
         {/* metrics: beside the chart on wide screens, under it on medium ones so the forecast keeps the right-hand column */}
         {!collapsed && (
-        <div className="thin-scroll order-3 md:col-start-1 md:row-start-2 wide:sticky wide:top-[60px] wide:row-span-2 wide:row-start-1 wide:max-h-[calc(100vh-72px)] wide:overflow-y-auto">
+        <div className="relative order-3 min-w-0 md:col-start-1 md:row-start-2 wide:sticky wide:top-[60px] wide:row-span-2 wide:row-start-1">
+          <div className="thin-scroll wide:max-h-[calc(100vh-72px)] wide:overflow-y-auto">
           <MetricSidebar
             metrics={ov.metrics}
             annotations={ov.annotations}
@@ -254,11 +267,21 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             explain={state.explain}
             onResetSelections={() => patch({ visible: null, model: null })}
           />
+          </div>
+          <ResizeHandle
+            edge="right"
+            cssVar="--panel-left"
+            min={200}
+            max={520}
+            label={t('Drag to resize the panel (double-click to reset)')}
+            onCommit={(w) => setWidth('left', w)}
+            className="hidden wide:block"
+          />
         </div>
         )}
 
         {/* chart */}
-        <div className={clsx('order-1 min-w-0 md:col-start-1 md:row-start-1', !collapsed && 'wide:col-start-2')}>
+        <div data-center-panel className={clsx('order-1 min-w-0 md:col-start-1 md:row-start-1', !collapsed && 'wide:col-start-2')}>
           <section className="overflow-hidden rounded-lg border border-line bg-panel">
             <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
               <div className="flex items-center gap-2">
@@ -337,10 +360,20 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
         {/* analysis */}
         <div
           className={clsx(
-            'thin-scroll order-2 flex min-w-0 flex-col gap-3 [&>*]:shrink-0 md:sticky md:top-[60px] md:col-start-2 md:row-span-2 md:row-start-1 md:max-h-[calc(100vh-72px)] md:overflow-y-auto',
+            'relative order-2 min-w-0 md:sticky md:top-[60px] md:col-start-2 md:row-span-2 md:row-start-1',
             !collapsed && 'wide:col-start-3 wide:row-span-1',
           )}
         >
+        <ResizeHandle
+          edge="left"
+          cssVar="--panel-right"
+          min={300}
+          max={900}
+          label={t('Drag to resize the panel (double-click to reset)')}
+          onCommit={(w) => setWidth('right', w)}
+          className="hidden md:block"
+        />
+        <div className="thin-scroll flex min-w-0 flex-col gap-3 [&>*]:shrink-0 md:max-h-[calc(100vh-72px)] md:overflow-y-auto">
           <ForecastSettingsBar settings={{ ...state.settings, horizon }} onChange={(s) => patch({ settings: s })} />
 
           <div role="tablist" className="thin-scroll flex gap-0.5 overflow-x-auto rounded-lg border border-line bg-panel p-1">
@@ -414,6 +447,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             />
           )}
           {state.tab === 'data' && <DataPanel overview={ov} onRefresh={() => refresh.mutate()} refreshing={refresh.isPending} />}
+        </div>
         </div>
       </main>
     </div>

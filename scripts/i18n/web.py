@@ -43,6 +43,7 @@ T = {
     'Liquidation heatmap': ('Mapa de calor de liquidaciones', 'Mapa de calor de liquidações'),
     'Show the metrics panel': ('Mostrar el panel de métricas', 'Mostrar o painel de métricas'),
     'Hide the metrics panel': ('Ocultar el panel de métricas', 'Ocultar o painel de métricas'),
+    'Drag to resize the panel (double-click to reset)': ('Arrastra para cambiar el ancho del panel (doble clic para restablecer)', 'Arraste para mudar a largura do painel (clique duplo para redefinir)'),
     'Show metrics': ('Mostrar métricas', 'Mostrar métricas'),
     'Hide metrics': ('Ocultar métricas', 'Ocultar métricas'),
     'Start both processes with npm run dev in the project folder.': ('Inicia ambos procesos con npm run dev en la carpeta del proyecto.', 'Inicie os dois processos com npm run dev na pasta do projeto.'),

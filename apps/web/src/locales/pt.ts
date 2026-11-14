@@ -43,6 +43,7 @@ const dict: Dict = {
   "Liquidation heatmap": "Mapa de calor de liquidações",
   "Show the metrics panel": "Mostrar o painel de métricas",
   "Hide the metrics panel": "Ocultar o painel de métricas",
+  "Drag to resize the panel (double-click to reset)": "Arraste para mudar a largura do painel (clique duplo para redefinir)",
   "Show metrics": "Mostrar métricas",
   "Hide metrics": "Ocultar métricas",
   "Start both processes with npm run dev in the project folder.": "Inicie os dois processos com npm run dev na pasta do projeto.",
