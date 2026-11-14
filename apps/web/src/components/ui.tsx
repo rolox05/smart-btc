@@ -108,6 +108,46 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/** Labelled range slider with the current value shown on the right. */
+export function Slider({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  display,
+  hint,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  display: string;
+  hint?: string;
+}) {
+  return (
+    <label className="block min-w-0" title={hint}>
+      <span className="mb-1 flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wider text-mute">
+        <span className="truncate">{label}</span>
+        <span className="num normal-case tracking-normal text-[11px] text-ink">{display}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(+e.target.value)}
+        className="h-1 w-full cursor-pointer accent-[#3987e5]"
+        aria-label={label}
+      />
+    </label>
+  );
+}
+
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 py-1 text-xs text-ink2">

@@ -75,6 +75,9 @@ export const MODEL_DEFAULTS = {
   kernel: 'median' as 'wide' | 'median',
   blendMode: 'fixed' as 'fixed' | 'adaptive',
   blendKappa: 20,
+  volModel: 'realized90' as 'realized90' | 'term',
+  volPersistence: 0.98,
+  volExponent: 0.75,
 };
 const opt = <K extends keyof typeof MODEL_DEFAULTS>(s: ForecastSettings, k: K): (typeof MODEL_DEFAULTS)[K] =>
   (s[k] ?? MODEL_DEFAULTS[k]) as (typeof MODEL_DEFAULTS)[K];
@@ -273,12 +276,72 @@ export interface Scratch {
 export const makeScratch = (n: number): Scratch => ({ dist: new Float64Array(n), order: new Uint32Array(n) });
 
 /** Factor that maps an analog's volatility regime onto the query date's. */
-export function volScale(ds: Dataset, q: number, i: number, enabled: boolean): number {
+const volCache = new WeakMap<Dataset, { ewma: Float64Array; long: Float64Array }>();
+
+/**
+ * Per-bar variance estimates from past returns only: a RiskMetrics EWMA (λ = 0.94 per day) for the
+ * current level and a trailing one-year mean of squared returns for the long-run level.
+ */
+function volArrays(ds: Dataset) {
+  let v = volCache.get(ds);
+  if (v) return v;
+  const n = ds.n;
+  const ewma = new Float64Array(n).fill(NaN);
+  const long = new Float64Array(n).fill(NaN);
+  const lambda = Math.pow(0.94, ds.barDays);
+  const win = Math.max(30, Math.round(365 / ds.barDays));
+  const r2 = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const r = Math.log(ds.c[i] / ds.c[i - 1]);
+    r2[i] = Number.isFinite(r) ? r * r : 0;
+  }
+  let e = NaN;
+  let acc = 0;
+  for (let i = 1; i < n; i++) {
+    acc += r2[i] - (i > win ? r2[i - win] : 0);
+    if (i >= 30) {
+      if (Number.isNaN(e)) {
+        let m = 0;
+        for (let k = i - 29; k <= i; k++) m += r2[k];
+        e = m / 30;
+      } else e = lambda * e + (1 - lambda) * r2[i];
+      ewma[i] = e;
+      long[i] = acc / Math.min(i, win);
+    }
+  }
+  v = { ewma, long };
+  volCache.set(ds, v);
+  return v;
+}
+
+/**
+ * Expected volatility per bar over the next H bars: the EWMA level decays geometrically toward the
+ * long-run level (the GARCH(1,1) term structure), so short horizons follow the current regime and long
+ * horizons lean on the yearly average.
+ */
+export function termVol(ds: Dataset, i: number, H: number, persistence: number): number {
+  const { ewma, long } = volArrays(ds);
+  const e = ewma[i];
+  const L = long[i];
+  if (!(e > 0) || !(L > 0)) return NaN;
+  const phi = Math.pow(persistence, ds.barDays);
+  const w = phi >= 1 ? 1 : (1 - Math.pow(phi, H)) / (H * (1 - phi));
+  return Math.sqrt(w * e + (1 - w) * L);
+}
+
+export function volScale(ds: Dataset, q: number, i: number, enabled: boolean, s?: ForecastSettings): number {
   if (!enabled) return 1;
+  const g = s ? opt(s, 'volExponent') : 1;
+  if (s && opt(s, 'volModel') === 'term') {
+    const p = opt(s, 'volPersistence');
+    const a = termVol(ds, q, s.horizon, p);
+    const b = termVol(ds, i, s.horizon, p);
+    if (a > 0 && b > 0) return Math.pow(clamp(a / b, 0.33, 3), g);
+  }
   const a = ds.vol90[q];
   const b = ds.vol90[i];
   if (!(a > 0) || !(b > 0)) return 1;
-  return clamp(a / b, 0.4, 2.5);
+  return Math.pow(clamp(a / b, 0.4, 2.5), g);
 }
 
 /**
@@ -363,7 +426,7 @@ export function findNeighbors(
     if (s.recencyHalfLifeYears > 0) wi *= Math.pow(0.5, ((q - i) * ds.barDays) / 365.25 / s.recencyHalfLifeYears);
     w.push(wi);
     d.push(dist[i]);
-    scale.push(volScale(ds, q, i, s.volAdjust));
+    scale.push(volScale(ds, q, i, s.volAdjust, s));
     wSum += wi;
     dSum += dist[i];
   }

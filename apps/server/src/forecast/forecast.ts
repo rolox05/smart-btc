@@ -46,14 +46,14 @@ export interface Sample {
 }
 
 /** Every (thinned) bar whose forward window is complete: the unconditional base rate the model must beat. */
-export function baseSample(ds: Dataset, prep: Prepared, start: number, q: number, maxCand: number, volAdjust: boolean): Sample {
+export function baseSample(ds: Dataset, prep: Prepared, start: number, q: number, maxCand: number, s: ForecastSettings): Sample {
   const idx: number[] = [];
   const scale: number[] = [];
   const stride = ds.stride;
   for (let i = Math.ceil(start / stride) * stride; i <= maxCand; i += stride) {
     if (Number.isNaN(prep.fwd[i])) continue;
     idx.push(i);
-    scale.push(volScale(ds, q, i, volAdjust));
+    scale.push(volScale(ds, q, i, s.volAdjust, s));
   }
   const w = new Float64Array(idx.length).fill(1 / Math.max(1, idx.length));
   return { idx, w, scale };
@@ -314,7 +314,7 @@ export function forecastContext(ds: Dataset, prep: Prepared, s: ForecastSettings
   if (!nb) {
     throw new ForecastError(tr('Not enough history for this combination of inputs. Try an earlier start year or fewer inputs.'));
   }
-  const base = baseSample(ds, prep, model.start, qf, maxCand, s.volAdjust);
+  const base = baseSample(ds, prep, model.start, qf, maxCand, s);
   return {
     ds,
     prep,

@@ -79,7 +79,7 @@ Environment variables: `API_PORT` (4747), `API_HOST` (127.0.0.1), `DATA_DIR` (`.
    whitened with their past-only covariance, so correlated inputs are not counted twice), keeping
    them at least a few days apart so one episode cannot dominate. Closer analogs weigh more
    (Gaussian kernel, bandwidth = median analog distance).
-3. What price did after each of those days, rescaled to today's volatility, is one possible path.
+3. What price did after each of those days, rescaled toward today's volatility (by the 90-bar volatility ratio raised to 0.75: partial rescaling scored better than full rescaling, which over-reacts to noisy volatility estimates), is one possible path.
    The analog paths are blended with the all-history base rate (50% by default) to tame the noise
    of a small sample.
 4. Scenario probabilities, targets, timings, touch odds and stop/target outcomes are weighted

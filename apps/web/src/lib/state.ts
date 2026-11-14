@@ -22,6 +22,16 @@ export interface TradeForm {
   accountUsd: number;
   riskPct: number;
   feeBps: number;
+  /** Stop as a % of price, or as a multiple of the average true range. */
+  stopMode: 'pct' | 'atr';
+  stopAtr: number;
+  /** Target as a % of price, or as a multiple of the stop distance (R). */
+  takeMode: 'pct' | 'r';
+  takeR: number;
+  /** Share of full Kelly used for the suggested risk per trade. */
+  kellyFraction: number;
+  /** Confidence level of Value at Risk / Expected Shortfall. */
+  confidence: number;
 }
 
 export interface AppState {
@@ -68,7 +78,7 @@ export const DEFAULT_STATE: AppState = {
   sidebarCollapsed: false,
   panelWidths: { left: null, right: null },
   tab: 'forecast',
-  trade: { side: 'long', stopPct: 5, takePct: 10, leverage: 3, accountUsd: 10_000, riskPct: 1, feeBps: 5 },
+  trade: { side: 'long', stopPct: 5, takePct: 10, leverage: 3, accountUsd: 10_000, riskPct: 1, feeBps: 5, stopMode: 'pct', stopAtr: 2, takeMode: 'pct', takeR: 2, kellyFraction: 0.25, confidence: 0.95 },
   backtest: { stepBars: 3, touchPct: 0 },
 };
 

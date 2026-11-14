@@ -127,7 +127,7 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest, t
     for (let i = Math.ceil(model.start / ds.stride) * ds.stride; i <= maxCand; i += ds.stride) {
       const f0 = prep.fwd[i];
       if (Number.isNaN(f0)) continue;
-      const sc = volScale(ds, q, i, s.volAdjust);
+      const sc = volScale(ds, q, i, s.volAdjust, s);
       const f = f0 * sc;
       bn++;
       if (blend > 0 && bn % thin === 0) mixVals.push(f);

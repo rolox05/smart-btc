@@ -54,6 +54,12 @@ const tradeSchema = z.object({
   accountUsd: z.number().min(1),
   riskPct: z.number().min(0.05).max(100),
   feeBps: z.number().min(0).max(50),
+  stopMode: z.enum(['pct', 'atr']).default('pct'),
+  stopAtr: z.number().min(0.25).max(10).default(2),
+  takeMode: z.enum(['pct', 'r']).default('pct'),
+  takeR: z.number().min(0.25).max(10).default(2),
+  kellyFraction: z.number().min(0.05).max(1).default(0.25),
+  confidence: z.number().min(0.5).max(0.999).default(0.95),
 });
 
 /** Chart payloads are capped: nobody scrolls through 100,000 intraday bars, and the browser should not have to. */

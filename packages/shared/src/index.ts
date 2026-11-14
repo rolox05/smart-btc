@@ -420,6 +420,18 @@ export interface ForecastSettings {
   /** 'adaptive' sets the base-rate weight from the evidence: κ / (independent analogs + κ). */
   blendMode?: 'fixed' | 'adaptive';
   blendKappa?: number;
+  /**
+   * How analog paths are rescaled to today's volatility: the ratio of 90-bar realized volatility, or a
+   * GARCH-style term structure (fast EWMA volatility reverting to the one-year level over the horizon).
+   */
+  volModel?: 'realized90' | 'term';
+  /** Daily persistence of volatility shocks for the term structure (0.9-0.995). */
+  volPersistence?: number;
+  /**
+   * Share of the volatility ratio applied (ratio^γ): 1 rescales analog paths fully to today's
+   * volatility, 0 keeps them as they were. Partial scaling hedges against noisy volatility estimates.
+   */
+  volExponent?: number;
 }
 
 export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = {
@@ -662,6 +674,40 @@ export interface TradeSetupRequest {
   riskPct: number;
   /** Taker fee per side in basis points. */
   feeBps: number;
+  /** 'atr': the stop sits `stopAtr` average true ranges from entry instead of at `stopPct`. */
+  stopMode?: 'pct' | 'atr';
+  stopAtr?: number;
+  /** 'r': the target sits `takeR` times the stop distance from entry instead of at `takePct`. */
+  takeMode?: 'pct' | 'r';
+  takeR?: number;
+  /** Share of the Kelly-optimal risk to suggest (0.25 = quarter Kelly). */
+  kellyFraction?: number;
+  /** Confidence level for Value at Risk and Expected Shortfall (e.g. 0.95). */
+  confidence?: number;
+}
+
+/** Tail-risk figures for a position, from the modelled paths. */
+export interface RiskStats {
+  confidence: number;
+  /** Loss not exceeded with the given confidence by the horizon, holding without a stop (% of notional). */
+  varPct: number;
+  /** Average loss in the worst (1 - confidence) of paths, holding without a stop (% of notional). */
+  esPct: number;
+  /** Adverse excursion (deepest move against the position before the horizon) at the given confidence (%). */
+  maePct: number;
+  /** Same three in USD for the computed position size. */
+  varUsd: number;
+  esUsd: number;
+  /** Probability that the path ever moves further against the position than the stop. */
+  pBeyondStop: number;
+}
+
+export interface KellySizing {
+  /** Share of the account to risk per trade that maximises long-run growth on these odds (%). */
+  fullRiskPct: number;
+  /** fullRiskPct × the chosen Kelly fraction (%). */
+  suggestedRiskPct: number;
+  fraction: number;
 }
 
 export interface TradeOutcome {
@@ -689,6 +735,11 @@ export interface TradeGridCell {
 export interface TradeSetupResult {
   side: 'long' | 'short';
   entry: number;
+  /** Stop and target distances actually used (resolved from ATR / R multiples when those modes are on). */
+  stopPct: number;
+  takePct: number;
+  risk: RiskStats;
+  kelly: KellySizing;
   stopPrice: number;
   takePrice: number;
   liquidationPrice: number;

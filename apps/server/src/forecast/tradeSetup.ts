@@ -1,4 +1,5 @@
-import type { TradeGridCell, TradeOutcome, TradeSetupRequest, TradeSetupResult } from '@smart-btc/shared';
+import type { KellySizing, RiskStats, TradeGridCell, TradeOutcome, TradeSetupRequest, TradeSetupResult } from '@smart-btc/shared';
+import { weightedQuantiles } from './stats.js';
 import type { Dataset } from '../analytics/dataset.js';
 import type { Prepared } from './analog.js';
 import { forecastContext, type Sample } from './forecast.js';
@@ -84,6 +85,78 @@ function simulate(
   };
 }
 
+/**
+ * Kelly sizing on the bracket's outcome distribution: the share f of the account risked per trade that
+ * maximises expected log growth, Σ p·ln(1 + f·x), with x the outcome in R (target, stop, or the average
+ * result at the horizon) after costs. Full Kelly is very volatile, which is why traders use a fraction.
+ */
+function kellySizing(o: TradeOutcome, stopPct: number, takePct: number, fraction: number): KellySizing {
+  const costR = Math.max(0, o.evPct / stopPct - o.evR);
+  const outcomes: [number, number][] = [
+    [o.pTake, takePct / stopPct - costR],
+    [o.pStop, -1 - costR],
+    [o.pTimeout, o.avgTimeoutPct / stopPct - costR],
+  ];
+  const fMax = 0.99 / (1 + costR);
+  let best = 0;
+  let bestG = 0;
+  for (let f = 0.0005; f < Math.min(fMax, 0.6); f += 0.0005) {
+    let g = 0;
+    for (const [p, x] of outcomes) if (p > 0) g += p * Math.log(1 + f * x);
+    if (g > bestG) {
+      bestG = g;
+      best = f;
+    }
+  }
+  return { fullRiskPct: best * 100, suggestedRiskPct: best * 100 * fraction, fraction };
+}
+
+/**
+ * Value at Risk, Expected Shortfall and adverse excursion over the horizon from the modelled paths,
+ * holding the position without a stop: the tail the stop is there to cut off.
+ */
+function riskStats(prep: Prepared, s: Sample, side: 'long' | 'short', confidence: number, stopPct: number, notional: number): RiskStats {
+  const { logC, logH, logL, H } = prep;
+  const n = s.idx.length;
+  const loss = new Float64Array(n);
+  const mae = new Float64Array(n);
+  let beyond = 0;
+  for (let j = 0; j < n; j++) {
+    const i = s.idx[j];
+    const sc = s.scale[j];
+    const r = Math.exp((logC[i + H] - logC[i]) * sc) - 1;
+    loss[j] = (side === 'long' ? -r : r) * 100;
+    let worst = 0;
+    for (let d = 1; d <= H; d++) {
+      const against = side === 'long' ? 1 - Math.exp((logL[i + d] - logC[i]) * sc) : Math.exp((logH[i + d] - logC[i]) * sc) - 1;
+      if (against > worst) worst = against;
+    }
+    mae[j] = worst * 100;
+    if (mae[j] >= stopPct) beyond += s.w[j];
+  }
+  const [varPct] = weightedQuantiles(loss, s.w, [confidence]);
+  const [maePct] = weightedQuantiles(mae, s.w, [confidence]);
+  // Expected Shortfall: weighted mean of the losses at or beyond VaR.
+  let num = 0;
+  let den = 0;
+  for (let j = 0; j < n; j++) {
+    if (loss[j] >= varPct) {
+      num += s.w[j] * loss[j];
+      den += s.w[j];
+    }
+  }
+  const esPct = den > 0 ? num / den : varPct;
+  return {
+    confidence,
+    varPct,
+    esPct,
+    maePct,
+    varUsd: (Math.max(0, varPct) / 100) * notional,
+    esUsd: (Math.max(0, esPct) / 100) * notional,
+    pBeyondStop: beyond,
+  };
+}
+
 /** Stop and target distances of the comparison grid, as multiples of the move unit. */
 const GRID_STOPS = [1, 1.5, 2, 3, 4];
 const GRID_TAKES = [1.5, 2, 3, 4, 6, 8];
@@ -93,8 +166,12 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
   const { nb, base, mix, q, qf } = ctx;
   const entry = req.entry > 0 ? req.entry : ctx.price;
   const dir = req.side === 'long' ? 1 : -1;
-  const stopFrac = req.stopPct / 100;
-  const takeFrac = req.takePct / 100;
+  const atrPct = (ds.atr14[qf] / ctx.price) * 100;
+  // Stops in ATR multiples and targets in R multiples, as most discretionary traders set them.
+  const stopPct = req.stopMode === 'atr' && atrPct > 0 ? Math.min(50, Math.max(0.05, (req.stopAtr ?? 2) * atrPct)) : req.stopPct;
+  const takePct = req.takeMode === 'r' ? Math.min(200, Math.max(0.05, (req.takeR ?? 2) * stopPct)) : req.takePct;
+  const stopFrac = stopPct / 100;
+  const takeFrac = takePct / 100;
 
   const funding = Number.isNaN(ds.fundingPerDay[qf]) ? 0 : ds.fundingPerDay[qf] * 100;
   const costsFor = (side: 'long' | 'short'): SimCosts => ({
@@ -102,10 +179,10 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
     fundingPctPerBar: (side === 'long' ? funding : -funding) * ds.barDays,
   });
 
-  const model = simulate(prep, mix, req.side, req.stopPct, req.takePct, costsFor(req.side));
-  const baseOut = simulate(prep, base, req.side, req.stopPct, req.takePct, costsFor(req.side));
+  const model = simulate(prep, mix, req.side, stopPct, takePct, costsFor(req.side));
+  const baseOut = simulate(prep, base, req.side, stopPct, takePct, costsFor(req.side));
   const other = req.side === 'long' ? 'short' : 'long';
-  const opposite = simulate(prep, mix, other, req.stopPct, req.takePct, costsFor(other));
+  const opposite = simulate(prep, mix, other, stopPct, takePct, costsFor(other));
 
   const grid: TradeGridCell[] = [];
   for (const stopPct of GRID_STOPS.map((k) => +(k * ctx.unitPct).toFixed(4))) {
@@ -142,7 +219,12 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
   if (req.entry > 0 && Math.abs(req.entry / ctx.price - 1) > 0.01) {
     warnings.push(t('Probabilities assume you are filled at the entry price now; a resting limit order may never fill.'));
   }
-  if (req.stopPct < (ds.atr14[qf] / ctx.price) * 100) {
+  const kelly = kellySizing(model, stopPct, takePct, req.kellyFraction ?? 0.25);
+  const risk = riskStats(prep, mix, req.side, req.confidence ?? 0.95, stopPct, positionNotionalUsd);
+  if (kelly.fullRiskPct > 0 && req.riskPct > kelly.fullRiskPct) {
+    warnings.push(t('You risk more per trade ({r}%) than full Kelly on these odds ({k}%): beyond that point a larger size lowers long-run growth.', { r: req.riskPct, k: kelly.fullRiskPct.toFixed(2) }));
+  }
+  if (stopPct < atrPct) {
     warnings.push(
       t('The stop is tighter than the average range of a single bar ({pct}%): ordinary noise will often hit it.', { pct: ((ds.atr14[qf] / ctx.price) * 100).toFixed(1) }),
     );
@@ -155,8 +237,12 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
     takePrice,
     liquidationPrice,
     maxSafeLeverage,
-    rewardRisk: req.takePct / req.stopPct,
-    breakevenWinRate: req.stopPct / (req.stopPct + req.takePct),
+    stopPct,
+    takePct,
+    risk,
+    kelly,
+    rewardRisk: takePct / stopPct,
+    breakevenWinRate: stopPct / (stopPct + takePct),
     positionNotionalUsd,
     positionBtc: positionNotionalUsd / entry,
     marginUsd,
@@ -164,7 +250,7 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
     rewardUsd: positionNotionalUsd * takeFrac,
     costPct,
     fundingPctPerDay: req.side === 'long' ? funding : -funding,
-    atrPct: (ds.atr14[qf] / ctx.price) * 100,
+    atrPct,
     model,
     base: baseOut,
     opposite,

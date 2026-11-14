@@ -225,6 +225,7 @@ T = {
         'Não há histórico de contratos em aberto para a maior parte desta janela, então as posições novas são estimadas apenas a partir do volume negociado.',
     ),
 
+    'You risk more per trade ({r}%) than full Kelly on these odds ({k}%): beyond that point a larger size lowers long-run growth.': ('Arriesgas por operación ({r}%) más que Kelly completo con estas probabilidades ({k}%): a partir de ahí, un tamaño mayor reduce el crecimiento a largo plazo.', 'Você arrisca por operação ({r}%) mais que o Kelly completo com estas probabilidades ({k}%): a partir daí, um tamanho maior reduz o crescimento de longo prazo.'),
     # ── data sources and readiness ──
     'BTC/USDT daily candles since 2017, live price': ('Velas diarias BTC/USDT desde 2017, precio en vivo', 'Barras diárias BTC/USDT desde 2017, preço ao vivo'),
     'BTC/USD daily candles since 2011 (long history, fallback price feed)': ('Velas diarias BTC/USD desde 2011 (historial largo, precio de respaldo)', 'Barras diárias BTC/USD desde 2011 (histórico longo, preço de reserva)'),
