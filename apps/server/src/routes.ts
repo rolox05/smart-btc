@@ -195,8 +195,9 @@ export function registerRoutes(app: FastifyInstance, datasets: DatasetService, s
     const { window } = z.object({ window: z.enum(HEATMAP_WINDOWS).default('2w') }).parse(req.query);
     const t = trOf(req);
     const ds = await dataset(HEATMAP_TIMEFRAME(window), t);
+    const daily = await dataset('1d', t);
     // One build per window, language and data update; the still-open bar changes little within that.
-    return results.get(`h:${t.lang}:${ds.version}:${window}`, () => liquidationHeatmap(window, ds, t));
+    return results.get(`h:${t.lang}:${ds.version}:${window}`, () => liquidationHeatmap(window, ds, daily, t));
   });
 
   app.get('/api/annotations/:id', async (req, reply) => {

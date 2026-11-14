@@ -374,6 +374,11 @@ export interface LiquidationHeatmap {
   maxUsd: number;
   /** Candles for the same columns. */
   candles: Candle[];
+  /**
+   * Liquidation notional (USD) still outstanding per price row at the last bar: longs (below price)
+   * and shorts (above it). This is the "liquidation map" drawn beside the heatmap.
+   */
+  profile: { long: number[]; short: number[] };
   notes: string[];
 }
 
