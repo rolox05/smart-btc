@@ -1,6 +1,5 @@
 import {
   addBars,
-  durationLabel,
   type AnalogMatch,
   type ConePoint,
   type DistributionStats,
@@ -12,10 +11,12 @@ import {
   type TouchProbability,
 } from '@smart-btc/shared';
 import type { Dataset } from '../analytics/dataset.js';
-import { METRIC_BY_ID } from '../analytics/metrics.js';
+import { metricShort } from '../analytics/metrics.js';
+import { EN, type T as Translator } from '../i18n/index.js';
 import {
   buildModel,
   featureStats,
+  baseWeight,
   findNeighbors,
   makeScratch,
   moveUnit,
@@ -158,6 +159,7 @@ function buildScenarios(
   T: number,
   H: number,
   dur: (bars: number) => string,
+  tr: Translator,
 ): Scenario[] {
   const { logC, logH, logL } = prep;
   const baseShare = (test: (r: number) => boolean) => {
@@ -166,9 +168,9 @@ function buildScenarios(
     return baseReturns.length ? c / baseReturns.length : 0;
   };
   const defs: { id: ScenarioId; label: string; test: (r: number) => boolean; fallback: number }[] = [
-    { id: 'rally', label: 'Rally', test: (r) => r >= T, fallback: T },
-    { id: 'range', label: 'Range', test: (r) => r > -T && r < T, fallback: 0 },
-    { id: 'decline', label: 'Decline', test: (r) => r <= -T, fallback: -T },
+    { id: 'rally', label: tr('Rally'), test: (r) => r >= T, fallback: T },
+    { id: 'range', label: tr('Range'), test: (r) => r > -T && r < T, fallback: 0 },
+    { id: 'decline', label: tr('Decline'), test: (r) => r <= -T, fallback: -T },
   ];
   const upT = Math.log(1 + T / 100);
   const dnT = Math.log(1 - T / 100);
@@ -216,14 +218,21 @@ function buildScenarios(
     const daysToExtreme = def.id !== 'range' && members.length ? Math.round(weightedMedian(extreme, w)) : null;
 
     let description: string;
+    const conf = daysToConfirm ? dur(daysToConfirm) : '–';
+    const ext = dur(daysToExtreme ?? H);
     if (!members.length) {
-      description = `None of the analogs ended ${def.id === 'range' ? `within ±${T}%` : def.id === 'rally' ? `up ${T}% or more` : `down ${T}% or more`}.`;
+      description =
+        def.id === 'range'
+          ? tr('None of the analogs ended within ±{t}%.', { t: T })
+          : def.id === 'rally'
+            ? tr('None of the analogs ended up {t}% or more.', { t: T })
+            : tr('None of the analogs ended down {t}% or more.', { t: T });
     } else if (def.id === 'rally') {
-      description = `Price ends at least ${T}% higher. Analogs crossed +${T}% after about ${daysToConfirm ? dur(daysToConfirm) : '–'} and peaked around ${dur(daysToExtreme ?? H)} in, after dipping ${signed(adverse)} at worst on the way.`;
+      description = tr('Price ends at least {t}% higher. Analogs crossed +{t}% after about {confirm} and peaked around {extreme} in, after dipping {adverse} at worst on the way.', { t: T, confirm: conf, extreme: ext, adverse: signed(adverse) });
     } else if (def.id === 'decline') {
-      description = `Price ends at least ${T}% lower. Analogs broke −${T}% after about ${daysToConfirm ? dur(daysToConfirm) : '–'} and bottomed around ${dur(daysToExtreme ?? H)} in, after bouncing ${signed(adverse)} at best on the way.`;
+      description = tr('Price ends at least {t}% lower. Analogs broke −{t}% after about {confirm} and bottomed around {extreme} in, after bouncing {adverse} at best on the way.', { t: T, confirm: conf, extreme: ext, adverse: signed(adverse) });
     } else {
-      description = `Price ends within ±${T}% of the current price. Typical swings inside the window: ${signed(adverse)} low to ${signed(favourable)} high.`;
+      description = tr('Price ends within ±{t}% of the current price. Typical swings inside the window: {low} low to {high} high.', { t: T, low: signed(adverse), high: signed(favourable) });
     }
 
     return {
@@ -270,7 +279,10 @@ function histogram(returns: Float64Array, w: ArrayLike<number>, baseReturns: Flo
 export interface ForecastContext {
   ds: Dataset;
   prep: Prepared;
+  /** Latest bar (possibly still forming): the forecast starts from its time and price. */
   q: number;
+  /** Last closed bar: model inputs, analogs and the base rate are all taken from here. */
+  qf: number;
   price: number;
   nb: Neighbors;
   base: Sample;
@@ -285,44 +297,47 @@ export interface ForecastContext {
 }
 
 /** Shared by the forecast and the trade-setup endpoints: select today's analogs. */
-export function forecastContext(ds: Dataset, prep: Prepared, s: ForecastSettings): ForecastContext {
+export function forecastContext(ds: Dataset, prep: Prepared, s: ForecastSettings, tr: Translator = EN): ForecastContext {
   const q = ds.n - 1;
-  const { model, dropped } = buildModel(ds, s.features, s.startYear);
+  const qf = ds.lastClosed;
+  const { model, dropped } = buildModel(ds, s.features, s.startYear, tr, qf);
   if (model.ids.length === 0) {
     throw new ForecastError(
       dropped.length
-        ? `None of the selected model inputs can be used right now (${dropped.map((d) => d.id).join(', ')}).`
-        : 'Select at least one metric as a model input.',
+        ? tr('None of the selected model inputs can be used right now ({ids}).', { ids: dropped.map((d) => metricShort(d.id, tr)).join(', ') })
+        : tr('Select at least one metric as a model input.'),
     );
   }
-  const maxCand = q - s.horizon;
-  const nb = findNeighbors(ds, model, prep, q, maxCand, s, makeScratch(ds.n));
+  // Analogs must have finished their whole forward window by the last close.
+  const maxCand = qf - s.horizon;
+  const nb = findNeighbors(ds, model, prep, qf, maxCand, s, makeScratch(ds.n));
   if (!nb) {
-    throw new ForecastError('Not enough history for this combination of inputs. Try an earlier start year or fewer inputs.');
+    throw new ForecastError(tr('Not enough history for this combination of inputs. Try an earlier start year or fewer inputs.'));
   }
-  const base = baseSample(ds, prep, model.start, q, maxCand, s.volAdjust);
+  const base = baseSample(ds, prep, model.start, qf, maxCand, s.volAdjust);
   return {
     ds,
     prep,
     q,
+    qf,
     price: ds.c[q],
     nb,
     base,
-    mix: mixSamples(nb, base, s.baseRateBlend),
+    mix: mixSamples(nb, base, baseWeight(s, nb)),
     dropped,
     featureIds: model.ids,
-    thresholdPct: scenarioThreshold(ds, q, s),
-    unitPct: moveUnit(ds, q, s.horizon),
+    thresholdPct: scenarioThreshold(ds, qf, s),
+    unitPct: moveUnit(ds, qf, s.horizon),
     model,
   };
 }
 
-export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings): ForecastResult {
-  const ctx = forecastContext(ds, prep, s);
-  const { q, price, nb, base, mix, model } = ctx;
+export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings, tr: Translator = EN): ForecastResult {
+  const ctx = forecastContext(ds, prep, s, tr);
+  const { q, qf, price, nb, base, mix, model } = ctx;
   const H = s.horizon;
   const T = ctx.thresholdPct;
-  const dur = (bars: number) => durationLabel(ds.tf, bars);
+  const dur = (bars: number) => tr.dur(ds.tf, bars);
 
   const { stats: terminal, returns } = terminalStats(prep, mix);
   const { stats: baseStats, returns: baseReturns } = terminalStats(prep, base);
@@ -345,7 +360,7 @@ export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings): F
     });
   }
 
-  const scenarios = buildScenarios(prep, mix, nb.idx.length, returns, baseReturns, price, T, H, dur).sort((a, b) => b.probability - a.probability);
+  const scenarios = buildScenarios(prep, mix, nb.idx.length, returns, baseReturns, price, T, H, dur, tr).sort((a, b) => b.probability - a.probability);
 
   const touch: TouchProbability[] = LADDER.map((k) => +(k * ctx.unitPct).toFixed(4)).map((level) => {
     const m = touchStats(prep, mix, level);
@@ -385,19 +400,19 @@ export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings): F
   }));
 
   const featuresUsed = model.ids.map((id, f) => {
-    const { mean, sd } = featureStats(model, f, q);
+    const { mean, sd } = featureStats(model, f, qf);
     return {
       id,
-      name: METRIC_BY_ID.get(id)?.short ?? id,
-      value: ds.series.get(id)?.[q] ?? NaN,
-      z: (model.cols[f][q] - mean) / sd,
+      name: metricShort(id, tr),
+      value: ds.series.get(id)?.[qf] ?? NaN,
+      z: (model.cols[f][qf] - mean) / sd,
     };
   });
   for (const f of featuresUsed) {
     // Delayed series have no display value on the last bars: show the latest one instead.
     if (Number.isNaN(f.value)) {
       const x = ds.series.get(f.id);
-      for (let i = q; x && i >= 0 && i > q - 45; i--) {
+      for (let i = qf; x && i >= 0 && i > qf - 45; i--) {
         if (!Number.isNaN(x[i])) {
           f.value = x[i];
           break;
@@ -407,41 +422,61 @@ export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings): F
   }
 
   // Confidence = how much evidence backs the numbers, not how bullish or bearish they are.
-  const essScore = clamp(nb.effectiveN / 40, 0, 1);
+  // effectiveN counts independent analogs (overlapping forward windows count once), so these
+  // thresholds are lower than for raw analog counts.
+  const essScore = clamp(nb.effectiveN / 30, 0, 1);
   const simScore = clamp((1.5 - nb.avgDistance) / 1.0, 0, 1);
   const score = 0.5 * essScore + 0.5 * simScore;
   // The label follows the weaker of the two: close matches are worth little if there are only a few.
   let matchLabel: 'low' | 'moderate' | 'good' = nb.avgDistance <= 0.6 ? 'good' : nb.avgDistance <= 1.1 ? 'moderate' : 'low';
-  if (nb.effectiveN < 12) matchLabel = 'low';
-  else if (nb.effectiveN < 25 && matchLabel === 'good') matchLabel = 'moderate';
+  if (nb.effectiveN < 8) matchLabel = 'low';
+  else if (nb.effectiveN < 20 && matchLabel === 'good') matchLabel = 'moderate';
   const notes: string[] = [];
+  const dist = nb.avgDistance.toFixed(2);
   notes.push(
     nb.avgDistance <= 0.6
-      ? `Analogs are close matches (average distance ${nb.avgDistance.toFixed(2)}σ per input).`
+      ? tr('Analogs are close matches (average distance {d}σ per input).', { d: dist })
       : nb.avgDistance <= 1.1
-        ? `Analogs are moderate matches (average distance ${nb.avgDistance.toFixed(2)}σ per input).`
-        : `The current setup has few true precedents: the nearest analogs are ${nb.avgDistance.toFixed(2)}σ away per input. Use fewer inputs or treat the result as close to the base rate.`,
+        ? tr('Analogs are moderate matches (average distance {d}σ per input).', { d: dist })
+        : tr('The current setup has few true precedents: the nearest analogs are {d}σ away per input. Use fewer inputs or treat the result as close to the base rate.', { d: dist }),
   );
   notes.push(
-    `${nb.idx.length} analogs from ${nb.candidates.toLocaleString('en-US')} eligible past bars (effective sample ≈ ${nb.effectiveN.toFixed(0)}). With a ${dur(H)} horizon, a 10-point probability difference is within sampling noise below ~100 samples.`,
+    tr('{k} analogs from {cand} eligible past bars (effective sample ≈ {ess}). With a {dur} horizon, a 10-point probability difference is within sampling noise below ~100 samples.', {
+      k: nb.idx.length,
+      cand: nb.candidates.toLocaleString('en-US'),
+      ess: nb.effectiveN.toFixed(0),
+      dur: dur(H),
+    }),
   );
-  if (s.baseRateBlend > 0) {
+  const blendW = baseWeight(s, nb);
+  if (blendW > 0) {
     notes.push(
-      `Probabilities are ${Math.round((1 - s.baseRateBlend) * 100)}% analogs + ${Math.round(s.baseRateBlend * 100)}% base rate (${base.idx.length.toLocaleString('en-US')} past ${dur(H)} windows).`,
+      tr('Probabilities are {a}% analogs + {b}% base rate ({n} past {dur} windows).', {
+        a: Math.round((1 - blendW) * 100),
+        b: Math.round(blendW * 100),
+        n: base.idx.length.toLocaleString('en-US'),
+        dur: dur(H),
+      }),
     );
   }
-  if (ctx.dropped.length) notes.push(`Ignored inputs: ${ctx.dropped.map((d) => `${METRIC_BY_ID.get(d.id)?.short ?? d.id} (${d.reason})`).join('; ')}.`);
+  if (ctx.dropped.length) {
+    notes.push(tr('Ignored inputs: {list}.', { list: ctx.dropped.map((d) => `${metricShort(d.id, tr)} (${d.reason})`).join('; ') }));
+  }
   const firstT = ds.t[Math.min(...nb.idx)];
   const lastT = ds.t[Math.max(...nb.idx)];
 
   const top = scenarios[0];
   const b60 = bands[1];
   const headline =
-    `Most likely over the next ${dur(H)}: ${top.label.toLowerCase()} (${Math.round(top.probability * 100)}%)` +
+    tr('Most likely over the next {dur}: {scenario} ({p}%)', { dur: dur(H), scenario: top.label.toLowerCase(), p: Math.round(top.probability * 100) }) +
     (top.id === 'range'
-      ? `, ending within ±${T}% of the current price, around ${usd(top.targetPrice)}.`
-      : `, median target ${usd(top.targetPrice)} (${signed(top.targetPct)})${top.daysToExtreme ? `, typically ${top.id === 'rally' ? 'peaking' : 'bottoming'} about ${dur(top.daysToExtreme)} in` : ''}.`) +
-    ` 60% of modelled outcomes end between ${usd(b60.lowPrice)} and ${usd(b60.highPrice)}.`;
+      ? tr(', ending within ±{t}% of the current price, around {price}.', { t: T, price: usd(top.targetPrice) })
+      : tr(', median target {price} ({pct})', { price: usd(top.targetPrice), pct: signed(top.targetPct) }) +
+        (top.daysToExtreme
+          ? tr(top.id === 'rally' ? ', typically peaking about {dur} in' : ', typically bottoming about {dur} in', { dur: dur(top.daysToExtreme) })
+          : '') +
+        '.') +
+    tr(' 60% of modelled outcomes end between {low} and {high}.', { low: usd(b60.lowPrice), high: usd(b60.highPrice) });
 
   return {
     asOf: ds.t[q],

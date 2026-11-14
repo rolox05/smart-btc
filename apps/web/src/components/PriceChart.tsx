@@ -1,7 +1,6 @@
 import {
   TF_INFO,
   addBars,
-  durationLabel,
   type AnnotationDef,
   type AnnotationPayload,
   type AnnotationSegment,
@@ -37,6 +36,7 @@ import {
 } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtBarTime, fmtCompactUsd, fmtMetric, fmtPct, fmtUsd } from '../lib/format';
+import { useT } from '../lib/i18n';
 import { SERIES, UI } from '../lib/palette';
 import type { Layers } from '../lib/state';
 
@@ -122,6 +122,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   const [paneTops, setPaneTops] = useState<number[]>([0]);
   // False while the chart has no width (e.g. it was created in a hidden tab); the range is applied once it does.
   const [sized, setSized] = useState(false);
+  const { t, dur, lang } = useT();
   const [tip, setTip] = useState<(Tip & { x: number; y: number }) | null>(null);
   // What each drawn object means, looked up when the chart reports the object under the cursor.
   const tips = useRef({ series: new Map<unknown, Tip>(), objects: new Map<string, Tip>() });
@@ -145,7 +146,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   // Annotations only exist on the chart while their metric's pane is shown.
   const activeAnnots = annotationDefs.filter((a) => panes.some((p) => p.metrics.some((m) => m.id === a.metricId)));
   const annotKey = activeAnnots.map((a) => a.id).join(',');
-  const structureKey = `${overlays.map((m) => m.id).join(',')}|${panes.map((p) => `${p.id}:${p.metrics.map((m) => m.id).join('+')}`).join(',')}|${layers.cone}|${layers.volume}|${annotKey}|${tf}`;
+  const structureKey = `${overlays.map((m) => m.id).join(',')}|${panes.map((p) => `${p.id}:${p.metrics.map((m) => m.id).join('+')}`).join(',')}|${layers.cone}|${layers.volume}|${annotKey}|${tf}|${lang}`;
   const height = MAIN_HEIGHT + panes.length * PANE_HEIGHT;
 
   // ── build the chart skeleton whenever the set of visible series changes ──
@@ -188,7 +189,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     }
 
     const seriesTips = new Map<unknown, Tip>();
-    if (volume) seriesTips.set(volume, { title: 'Volume', text: 'BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.' });
+    if (volume) seriesTips.set(volume, { title: t('Volume'), text: t('BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.') });
     const objectTips = new Map<string, Tip>();
     const metricTip = (m: MetricDef): Tip => ({ title: m.name, text: [m.description, m.guide?.read[0]].filter(Boolean).join(' ') });
 
@@ -252,7 +253,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
             axisLabelVisible: false,
             title: b.label,
           });
-          objectTips.set(id, { title: `${m.short} ${b.value}${b.label ? ` · ${b.label}` : ''}`, text: `Reference level for ${m.name}. ${m.guide?.read[0] ?? m.description}` });
+          objectTips.set(id, { title: `${m.short} ${b.value}${b.label ? ` · ${b.label}` : ''}`, text: `${t('Reference level for {name}.', { name: m.name })} ${m.guide?.read[0] ?? m.description}` });
         }
       }
     });
@@ -271,9 +272,9 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       const entry = { bullish: mk(UI.up), bearish: mk(UI.down), markers: createSeriesMarkers(host, [], { autoScale: false }) };
       annots.set(a.id, entry);
       for (const kind of ['bullish', 'bearish'] as const) {
-        const t: Tip = { title: `${kind === 'bullish' ? 'Bullish' : 'Bearish'} · ${a.name}`, text: `${a.description} The line joins the two turning points being compared; the arrow marks the second one.` };
-        seriesTips.set(entry[kind], t);
-        objectTips.set(`ann:${a.id}:${kind}`, t);
+        const info: Tip = { title: `${kind === 'bullish' ? t('Bullish') : t('Bearish')} · ${a.name}`, text: `${a.description} ${t('The line joins the two turning points being compared; the arrow marks the second one.')}` };
+        seriesTips.set(entry[kind], info);
+        objectTips.set(`ann:${a.id}:${kind}`, info);
       }
     }
 
@@ -287,11 +288,11 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
         [LineStyle.Dotted, 1],
       ];
       const coneTips: Tip[] = [
-        { title: '80% band · lower edge', text: 'Eight in ten modelled outcomes stay between the two dotted lines. Only about one in ten ends below this one.' },
-        { title: '50% band · lower edge', text: 'Half of the modelled outcomes fall between the two dashed lines.' },
-        { title: 'Forecast median', text: 'The middle of the modelled paths: half of them are above this line and half below. It is not a prediction of the path price will take.' },
-        { title: '50% band · upper edge', text: 'Half of the modelled outcomes fall between the two dashed lines.' },
-        { title: '80% band · upper edge', text: 'Eight in ten modelled outcomes stay between the two dotted lines. Only about one in ten ends above this one.' },
+        { title: t('80% band · lower edge'), text: t('Eight in ten modelled outcomes stay between the two dotted lines. Only about one in ten ends below this one.') },
+        { title: t('50% band · lower edge'), text: t('Half of the modelled outcomes fall between the two dashed lines.') },
+        { title: t('Forecast median'), text: t('The middle of the modelled paths: half of them are above this line and half below. It is not a prediction of the path price will take.') },
+        { title: t('50% band · upper edge'), text: t('Half of the modelled outcomes fall between the two dashed lines.') },
+        { title: t('80% band · upper edge'), text: t('Eight in ten modelled outcomes stay between the two dotted lines. Only about one in ten ends above this one.') },
       ];
       styles.forEach(([lineStyle, lineWidth], i) => {
         const s = chart.addSeries(LineSeries, {
@@ -434,11 +435,16 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       const def = annotationDefs.find((d) => d.id === id);
       for (const st of payload?.stats ?? []) {
         if (!def) continue;
-        const dir = st.kind === 'bullish' ? 'up' : 'down';
         const past = st.move
-          ? ` After the ${st.move.n} earlier ${st.kind} signals on this timeframe, the move ${dir} lasted ${durationLabel(tf, st.move.avgBars)} on average (median ${durationLabel(tf, st.move.medianBars)}) from confirmation to its best point, for a typical ${st.move.medianPct.toFixed(1)}%, measured within ${durationLabel(tf, st.move.lookahead)}.`
-          : ' There are no earlier signals of this kind on this timeframe to measure.';
-        const info: Tip = { title: `${st.label} · ${def.name}`, text: `${st.kind === 'bullish' ? 'Price made a lower low while RSI made a higher low: selling is losing force.' : 'Price made a higher high while RSI made a lower high: buying is losing force.'}${past}` };
+          ? t(
+              st.kind === 'bullish'
+                ? 'After the {n} earlier bullish signals on this timeframe, the move up lasted {avg} on average (median {median}) from confirmation to its best point, for a typical {pct}%, measured within {window}.'
+                : 'After the {n} earlier bearish signals on this timeframe, the move down lasted {avg} on average (median {median}) from confirmation to its best point, for a typical {pct}%, measured within {window}.',
+              { n: st.move.n, avg: dur(tf, st.move.avgBars), median: dur(tf, st.move.medianBars), pct: st.move.medianPct.toFixed(1), window: dur(tf, st.move.lookahead) },
+            )
+          : t('There are no earlier signals of this kind on this timeframe to measure.');
+        const what = st.kind === 'bullish' ? t('Price made a lower low while RSI made a higher low: selling is losing force.') : t('Price made a higher high while RSI made a lower high: buying is losing force.');
+        const info: Tip = { title: `${st.label} · ${def.name}`, text: `${what} ${past}` };
         tips.current.series.set(a[st.kind], info);
         tips.current.objects.set(`ann:${id}:${st.kind}`, info);
       }
@@ -507,9 +513,9 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     if (layers.targets && forecast) {
       for (const s of forecast.scenarios) {
         if (s.id === 'range' || s.probability < 0.03) continue;
-        add(s.targetPrice, s.id === 'rally' ? UI.up : UI.down, `${s.label} target · ${Math.round(s.probability * 100)}%`, LineStyle.LargeDashed, {
-          title: `${s.label} scenario target · ${fmtUsd(s.targetPrice)}`,
-          text: `Median outcome of the ${s.label.toLowerCase()} scenario, which the model gives ${Math.round(s.probability * 100)}% (base rate ${Math.round(s.baseProbability * 100)}%). ${s.description}`,
+        add(s.targetPrice, s.id === 'rally' ? UI.up : UI.down, t('{scenario} target · {p}%', { scenario: s.label, p: Math.round(s.probability * 100) }), LineStyle.LargeDashed, {
+          title: t('{scenario} scenario target · {price}', { scenario: s.label, price: fmtUsd(s.targetPrice) }),
+          text: `${t('Median outcome of the {scenario} scenario, which the model gives {p}% (base rate {base}%).', { scenario: s.label.toLowerCase(), p: Math.round(s.probability * 100), base: Math.round(s.baseProbability * 100) })} ${s.description}`,
         });
       }
     }
@@ -524,29 +530,30 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       const where = (l: LiquidityLevel) => `${fmtUsd(l.price)} (${fmtPct(l.distancePct)})`;
       if (layers.swings) {
         for (const l of pick(liquidity.swings, 3, 'near')) {
-          add(l.price, UI.ink2, l.side === 'buy-side' ? 'Stops above' : 'Stops below', LineStyle.Dashed, {
-            title: `Liquidity pool · ${l.label} at ${where(l)}`,
-            text: `${l.detail}. Stop orders tend to cluster just beyond a swing ${l.side === 'buy-side' ? 'high' : 'low'} that price has not revisited, so price is often drawn there and can reverse once they are triggered.`,
+          add(l.price, UI.ink2, l.side === 'buy-side' ? t('Stops above') : t('Stops below'), LineStyle.Dashed, {
+            title: t('Liquidity pool · {label} at {where}', { label: l.label, where: where(l) }),
+            text: `${l.detail}. ${t(l.side === 'buy-side' ? 'Stop orders tend to cluster just beyond a swing high that price has not revisited, so price is often drawn there and can reverse once they are triggered.' : 'Stop orders tend to cluster just beyond a swing low that price has not revisited, so price is often drawn there and can reverse once they are triggered.')}`,
           });
         }
       }
       if (layers.liquidations) {
         for (const l of pick(liquidity.liquidations, 3, 'strong')) {
-          add(l.price, SERIES[3], `Est. ${l.side === 'buy-side' ? 'short' : 'long'} liqs ${fmtCompactUsd(l.notionalUsd)}`, LineStyle.Dotted, {
-            title: `${l.label} near ${where(l)}`,
-            text: `About ${fmtCompactUsd(l.notionalUsd)} of leveraged ${l.side === 'buy-side' ? 'shorts' : 'longs'} would be force-closed around here, which adds fuel to a move that reaches it. ${l.detail}.`,
+          add(l.price, SERIES[3], t(l.side === 'buy-side' ? 'Est. short liqs {usd}' : 'Est. long liqs {usd}', { usd: fmtCompactUsd(l.notionalUsd) }), LineStyle.Dotted, {
+            title: t('{label} near {where}', { label: l.label, where: where(l) }),
+            text: `${t(l.side === 'buy-side' ? 'About {usd} of leveraged shorts would be force-closed around here, which adds fuel to a move that reaches it.' : 'About {usd} of leveraged longs would be force-closed around here, which adds fuel to a move that reaches it.', { usd: fmtCompactUsd(l.notionalUsd) })} ${l.detail}.`,
           });
         }
       }
       if (layers.walls) {
         for (const l of pick(liquidity.walls, 2, 'strong')) {
           add(l.price, SERIES[6], `${l.label} ${fmtCompactUsd(l.notionalUsd)}`, LineStyle.SparseDotted, {
-            title: `${l.label} at ${where(l)}`,
-            text: `${fmtCompactUsd(l.notionalUsd)} of resting ${l.side === 'buy-side' ? 'sell' : 'buy'} orders (${l.detail}). Large walls can slow or stall price, but they can also be pulled before it arrives.`,
+            title: t('{label} at {where}', { label: l.label, where: where(l) }),
+            text: t(l.side === 'buy-side' ? '{usd} of resting sell orders ({detail}). Large walls can slow or stall price, but they can also be pulled before it arrives.' : '{usd} of resting buy orders ({detail}). Large walls can slow or stall price, but they can also be pulled before it arrives.', { usd: fmtCompactUsd(l.notionalUsd), detail: l.detail }),
           });
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forecast, liquidity, layers.targets, layers.swings, layers.liquidations, layers.walls, structureKey]);
 
   // ── legend values at the crosshair (or latest) ──
@@ -591,7 +598,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
                 <span>H {fmtUsd(Math.max(bar.h, liveClose ?? bar.h))}</span>
                 <span>L {fmtUsd(Math.min(bar.l, liveClose ?? bar.l))}</span>
                 <span>C {fmtUsd(liveClose)}</span>
-                {layers.volume && <span>Vol {bar.v >= 1000 ? `${(bar.v / 1000).toFixed(1)}K` : bar.v.toFixed(0)} BTC</span>}
+                {layers.volume && <span>{t('Vol')} {bar.v >= 1000 ? `${(bar.v / 1000).toFixed(1)}K` : bar.v.toFixed(0)} BTC</span>}
                 {prev && liveClose != null && (
                   <span className={liveClose >= prev.c ? 'text-up' : 'text-down'}>{fmtPct((liveClose / prev.c - 1) * 100, 2)}</span>
                 )}
@@ -599,8 +606,14 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
             )}
             {coneAtHover && (
               <span>
-                Forecast +{durationLabel(tf, coneAtHover.day)}: median {fmtUsd(coneAtHover.p50)} · 50% band {fmtUsd(coneAtHover.p25)}–{fmtUsd(coneAtHover.p75)} · 80% band{' '}
-                {fmtUsd(coneAtHover.p10)}–{fmtUsd(coneAtHover.p90)}
+                {t('Forecast +{dur}: median {median} · 50% band {lo50}–{hi50} · 80% band {lo80}–{hi80}', {
+                  dur: dur(tf, coneAtHover.day),
+                  median: fmtUsd(coneAtHover.p50),
+                  lo50: fmtUsd(coneAtHover.p25),
+                  hi50: fmtUsd(coneAtHover.p75),
+                  lo80: fmtUsd(coneAtHover.p10),
+                  hi80: fmtUsd(coneAtHover.p90),
+                })}
               </span>
             )}
           </div>
@@ -615,7 +628,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
           {layers.cone && forecast && (
             <span className="flex items-center gap-1">
               <span className="w-3 rounded" style={{ background: UI.ink2, height: 3 }} />
-              {durationLabel(tf, forecast.settings.horizon)} forecast: median (solid), 50% band (dashed), 80% band (dotted)
+              {t('{dur} forecast: median (solid), 50% band (dashed), 80% band (dotted)', { dur: dur(tf, forecast.settings.horizon) })}
             </span>
           )}
         </div>
@@ -632,7 +645,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
             <span key={m.id} className="num flex items-center gap-1">
               <span className="w-3 rounded" style={{ background: SERIES[m.colorSlot], height: 3 }} />
               {m.name} <span className="text-ink">{fmtMetric(valueOf(m.id), m.unit)}</span>
-              {m.delayedDays ? <span className="text-mute">(source lags {m.delayedDays}d)</span> : null}
+              {m.delayedDays ? <span className="text-mute">{t('(source lags {n}d)', { n: m.delayedDays })}</span> : null}
               {Object.entries(m.companionInfo ?? {}).map(([cid, info]) => (
                 <span key={cid} className="ml-1 flex items-center gap-1">
                   <span className="w-3 rounded" style={{ background: SERIES[info.colorSlot], height: 2 }} />
@@ -646,9 +659,9 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
             .map((a) => (
               <span key={a.id} className="flex items-center gap-1">
                 <span className="w-3 rounded" style={{ background: UI.up, height: 3 }} />
-                bullish
+                {t('bullish')}
                 <span className="ml-1 w-3 rounded" style={{ background: UI.down, height: 3 }} />
-                bearish divergence
+                {t('bearish divergence')}
               </span>
             ))}
         </div>

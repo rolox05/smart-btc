@@ -5,7 +5,9 @@ export interface Provider {
   id: string;
   name: string;
   url: string;
+  /** What the source supplies, in English; {placeholders} are filled from providesVars (each value translated too). */
   provides: string;
+  providesVars?: Record<string, string>;
   /** Minimum time between two syncs. */
   intervalMs: number;
   /** Returns the number of rows written. Must be safe to call repeatedly. */

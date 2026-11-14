@@ -1,6 +1,7 @@
 import type { SourceStatus } from '@smart-btc/shared';
 import { providers, type Provider } from './providers/index.js';
 import type { Store, SyncState } from './store/store.js';
+import { EN, type T } from './i18n/index.js';
 
 type Listener = () => void;
 
@@ -81,7 +82,7 @@ export class SyncService {
     return (await this.store.getSyncStates()).some((s) => s.provider === providerId && s.lastOk != null);
   }
 
-  async status(): Promise<SourceStatus[]> {
+  async status(t: T = EN): Promise<SourceStatus[]> {
     const states = new Map((await this.store.getSyncStates()).map((s) => [s.provider, s]));
     const now = Date.now();
     return providers.map((p) => {
@@ -93,7 +94,7 @@ export class SyncService {
         id: p.id,
         name: p.name,
         url: p.url,
-        provides: p.provides,
+        provides: t(p.provides, Object.fromEntries(Object.entries(p.providesVars ?? {}).map(([k, v]) => [k, t(v)]))),
         status,
         lastOk: s?.lastOk ?? null,
         lastAttempt: s?.lastAttempt ?? null,

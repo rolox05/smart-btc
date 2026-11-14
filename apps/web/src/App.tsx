@@ -30,6 +30,7 @@ import {
   useTradeSetup,
 } from './hooks/useData';
 import { api } from './lib/api';
+import { LangProvider, setLang, useT } from './lib/i18n';
 import { type TabId, useAppState, useDebounced, useSelections } from './lib/state';
 
 // The Data tab stays reachable from the source-status button in the header.
@@ -64,6 +65,17 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function App() {
   const { state, patch } = useAppState();
+  // The language must be in place before any child (formatters, query keys) reads it during this render.
+  setLang(state.lang);
+  return (
+    <LangProvider value={state.lang}>
+      <Workspace state={state} patch={patch} />
+    </LangProvider>
+  );
+}
+
+function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state' | 'patch'>) {
+  const { t } = useT();
   const qc = useQueryClient();
   const [rankingKey, setRankingKey] = useState<string | null>(null);
   const [guideSection, setGuideSection] = useState<GuideSection>('metrics');
@@ -173,6 +185,8 @@ export default function App() {
       onOpenData={() => patch({ tab: 'data' })}
       explain={state.explain}
       onExplain={(explain) => patch({ explain })}
+      lang={state.lang}
+      onLang={(lang) => patch({ lang })}
     />
   );
 
@@ -186,14 +200,14 @@ export default function App() {
           {!downloading && overview.failureCount > 3 ? (
             <Note tone="error">
               {overview.error?.message}
-              <div className="mt-1 text-mute">Start both processes with <code className="text-ink2">npm run dev</code> in the project folder.</div>
+              <div className="mt-1 text-mute">{t('Start both processes with npm run dev in the project folder.')}</div>
             </Note>
           ) : (
-            <Loading label={overview.error?.message ?? 'Downloading 15 years of price and on-chain history. This takes a few seconds on first start…'} />
+            <Loading label={overview.error?.message ?? t('Downloading 15 years of price and on-chain history. This takes a few seconds on first start…')} />
           )}
           {tf !== '1d' && (
             <button onClick={() => setTimeframe('1d')} className="mt-2 text-xs text-[#7fb2f0] underline-offset-2 hover:underline">
-              Switch to the daily timeframe meanwhile
+              {t('Switch to the daily timeframe meanwhile')}
             </button>
           )}
         </div>
@@ -251,25 +265,25 @@ export default function App() {
                 <button
                   onClick={() => patch({ sidebarCollapsed: !collapsed })}
                   aria-expanded={!collapsed}
-                  title={collapsed ? 'Show the metrics panel' : 'Hide the metrics panel'}
+                  title={collapsed ? t('Show the metrics panel') : t('Hide the metrics panel')}
                   className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[11px] text-ink2 hover:bg-raised"
                 >
-                  {collapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />} {collapsed ? 'Show metrics' : 'Hide metrics'}
+                  {collapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />} {collapsed ? t('Show metrics') : t('Hide metrics')}
                 </button>
                 <Segmented
-                  label="Central panel"
+                  label={t('Central panel')}
                   size="sm"
                   value={state.center}
                   onChange={(center) => patch({ center })}
                   options={[
-                    { value: 'chart', label: 'Price chart' },
-                    { value: 'heatmap', label: 'Liquidation heatmap' },
+                    { value: 'chart', label: t('Price chart') },
+                    { value: 'heatmap', label: t('Liquidation heatmap') },
                   ]}
                 />
               </div>
               {state.center === 'chart' && (
-                <div title={`${view.hint}. The first six set the bar size; 3m to All show daily bars over a longer stretch.`}>
-                  <Segmented label="Time" size="sm" value={view.id} onChange={setView} options={VIEWS.map((v) => ({ value: v.id, label: v.id }))} />
+                <div title={t('{hint}. The first six set the bar size; 3m to All show daily bars over a longer stretch.', { hint: t(view.hint) })}>
+                  <Segmented label={t('Time')} size="sm" value={view.id} onChange={setView} options={VIEWS.map((v) => ({ value: v.id, label: v.id === 'All' ? t('All') : v.id }))} />
                 </div>
               )}
             </header>
@@ -277,13 +291,13 @@ export default function App() {
               heatmap.data ? (
                 <LiquidationHeatmapView heatmap={heatmap.data} window={state.heatmapWindow} onWindow={(heatmapWindow) => patch({ heatmapWindow })} loading={heatmap.isFetching && heatmap.data.window !== state.heatmapWindow} />
               ) : (
-                <div className="px-3">{heatmap.error ? <div className="py-4"><Note tone="error">{heatmap.error.message}</Note></div> : <Loading label="Estimating liquidation levels hour by hour…" />}</div>
+                <div className="px-3">{heatmap.error ? <div className="py-4"><Note tone="error">{heatmap.error.message}</Note></div> : <Loading label={t('Estimating liquidation levels…')} />}</div>
               )
             ) : (
             <>
             {switching && (
               <div className="border-b border-line px-3">
-                <Loading label={overview.error?.message ?? `Loading the ${tfInfo.label} timeframe…`} />
+                <Loading label={overview.error?.message ?? t('Loading the {tf} timeframe…', { tf: tfInfo.label })} />
               </div>
             )}
             {candles.data ? (
@@ -307,7 +321,7 @@ export default function App() {
                 {candles.error && !/download/i.test(candles.error.message) ? (
                   <div className="py-4"><Note tone="error">{candles.error.message}</Note></div>
                 ) : (
-                  <Loading label={candles.error?.message ?? `Loading ${tfInfo.label} candles…`} />
+                  <Loading label={candles.error?.message ?? t('Loading {tf} candles…', { tf: tfInfo.label })} />
                 )}
               </div>
             )}
@@ -315,8 +329,8 @@ export default function App() {
             )}
           </section>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-mute">
-            Drag to pan, scroll or pinch on the chart to zoom, drag the divider between panes to resize them. The time setting fixes the bar size ({tfInfo.label} now) and applies to the chart, the price indicators and the forecast alike; on-chain and derivatives metrics are daily figures on every timeframe.
-            {state.explain ? ' Rest the cursor on a line, level or metric for an explanation; the "Hints" switch in the header turns this off.' : ''}
+            {t('Drag to pan, scroll or pinch on the chart to zoom, drag the divider between panes to resize them. The time setting fixes the bar size ({tf} now) and applies to the chart, the price indicators and the forecast alike; on-chain and derivatives metrics are daily figures on every timeframe.', { tf: tfInfo.label })}
+            {state.explain ? ` ${t('Rest the cursor on a line, level or metric for an explanation; the "Hints" switch in the header turns this off.')}` : ''}
           </p>
         </div>
 
@@ -330,33 +344,33 @@ export default function App() {
           <ForecastSettingsBar settings={{ ...state.settings, horizon }} onChange={(s) => patch({ settings: s })} />
 
           <div role="tablist" className="thin-scroll flex gap-0.5 overflow-x-auto rounded-lg border border-line bg-panel p-1">
-            {TABS.map((t) => (
+            {TABS.map((tab) => (
               <button
-                key={t.id}
+                key={tab.id}
                 role="tab"
-                aria-selected={state.tab === t.id}
-                onClick={() => patch({ tab: t.id })}
+                aria-selected={state.tab === tab.id}
+                onClick={() => patch({ tab: tab.id })}
                 className={clsx(
                   'flex-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  state.tab === t.id ? 'bg-raised text-ink' : 'text-mute hover:text-ink2',
+                  state.tab === tab.id ? 'bg-raised text-ink' : 'text-mute hover:text-ink2',
                 )}
               >
-                {t.label}
+                {t(tab.label)}
               </button>
             ))}
           </div>
 
           {noInputs && state.tab !== 'liquidity' && state.tab !== 'data' && state.tab !== 'guide' ? (
-            <Note tone="warn">No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.</Note>
+            <Note tone="warn">{t('No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.')}</Note>
           ) : (
             <>
               {state.tab === 'forecast' && (
-                <Async query={forecast} loadingLabel="Searching history for similar setups…">
+                <Async query={forecast} loadingLabel={t('Searching history for similar setups…')}>
                   {(f) => <ForecastPanel forecast={f} backtest={backtest.error ? undefined : backtest.data} backtestPending={backtest.isFetching} onOpenBacktest={() => patch({ tab: 'backtest' })} />}
                 </Async>
               )}
               {state.tab === 'odds' && (
-                <Async query={forecast} loadingLabel="Searching history for similar setups…">
+                <Async query={forecast} loadingLabel={t('Searching history for similar setups…')}>
                   {(f) => <OddsPanel forecast={f} />}
                 </Async>
               )}
@@ -377,7 +391,7 @@ export default function App() {
             </>
           )}
           {state.tab === 'liquidity' && (
-            <Async query={liquidity} loadingLabel="Reading order books and estimating liquidation levels…">
+            <Async query={liquidity} loadingLabel={t('Reading order books and estimating liquidation levels…')}>
               {(l) => <LiquidityPanel report={l} />}
             </Async>
           )}

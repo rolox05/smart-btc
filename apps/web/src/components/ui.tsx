@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { AlertTriangle, Info, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '../lib/i18n';
 
 /**
  * Explanation card shown beside an element after a short hover. Rendered in a portal so that
@@ -231,11 +232,12 @@ export function Note({ children, tone = 'info' }: { children: ReactNode; tone?: 
   );
 }
 
-export function Loading({ label = 'Loading…' }: { label?: string }) {
+export function Loading({ label }: { label?: string }) {
+  const { t } = useT();
   return (
     <div className="flex items-center gap-2 py-6 text-xs text-mute">
       <Loader2 size={14} className="animate-spin" />
-      {label}
+      {label ?? t('Loading…')}
     </div>
   );
 }

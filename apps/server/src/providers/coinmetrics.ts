@@ -12,6 +12,10 @@ const METRICS: Record<string, string> = {
   HashRate: 'cm.hashrate',
   FlowInExUSD: 'cm.flowIn',
   FlowOutExUSD: 'cm.flowOut',
+  IssTotUSD: 'cm.issUsd',
+  SplyExNtv: 'cm.exSupply',
+  TxCnt: 'cm.txCnt',
+  FeeTotNtv: 'cm.feesBtc',
 };
 
 interface CmResponse {
@@ -23,10 +27,12 @@ export const coinmetrics: Provider = {
   id: 'coinmetrics',
   name: 'Coin Metrics Community',
   url: 'https://community-api.coinmetrics.io',
-  provides: 'MVRV / realized price, market cap, supply, exchange flows, hash rate, active addresses since 2010',
+  provides: 'MVRV / realized price, market cap, supply, exchange flows and balances, issuance, fees, transactions, hash rate since 2010',
   intervalMs: 6 * HOUR,
   async sync(store) {
-    const last = await store.lastPointT('cm.mvrv');
+    // Start from the series that is furthest behind, so fields added later get their full history.
+    const lasts = await Promise.all(Object.values(METRICS).map((s) => store.lastPointT(s)));
+    const last = lasts.some((l) => l == null) ? null : Math.min(...(lasts as number[]));
     // Recent days are revised upstream ("flash" status), so overlap by a week.
     const startDay = last != null ? new Date((last - 7 * 86_400) * 1000).toISOString().slice(0, 10) : '2010-07-18';
     let url: string | undefined =

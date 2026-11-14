@@ -1,7 +1,8 @@
-import type { Overview, Ticker } from '@smart-btc/shared';
+import { LANGS, LANG_NAME, type Lang, type Overview, type Ticker } from '@smart-btc/shared';
 import clsx from 'clsx';
-import { Info, RefreshCw, TrendingUp } from 'lucide-react';
+import { Globe, Info, RefreshCw, TrendingUp } from 'lucide-react';
 import { fmtCompactUsd, fmtPct, fmtUsd } from '../lib/format';
+import { useT } from '../lib/i18n';
 
 export function Header({
   ticker,
@@ -11,6 +12,8 @@ export function Header({
   onOpenData,
   explain,
   onExplain,
+  lang,
+  onLang,
 }: {
   ticker?: Ticker;
   overview?: Overview;
@@ -20,7 +23,10 @@ export function Header({
   /** "Explain on hover" switch; omitted while the app is still loading. */
   explain?: boolean;
   onExplain?: (on: boolean) => void;
+  lang: Lang;
+  onLang: (lang: Lang) => void;
 }) {
+  const { t } = useT();
   const sources = overview?.sources ?? [];
   const live = sources.filter((s) => s.status === 'ok').length;
   const allLive = sources.length > 0 && live === sources.length;
@@ -36,7 +42,7 @@ export function Header({
           </span>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-ink">Smart BTC</div>
-            <div className="text-[10px] text-mute">Probabilistic outlook from history</div>
+            <div className="text-[10px] text-mute">{t('Probabilistic outlook from history')}</div>
           </div>
         </div>
 
@@ -47,31 +53,52 @@ export function Header({
           </div>
           {ticker && (
             <div className="hidden gap-3 text-[11px] text-mute xl:flex">
-              <span>24h high <span className="text-ink2">{fmtUsd(ticker.high24h)}</span></span>
-              <span>low <span className="text-ink2">{fmtUsd(ticker.low24h)}</span></span>
-              <span>volume <span className="text-ink2">{fmtCompactUsd(ticker.volume24hUsd)}</span></span>
-              <span>via {ticker.source}</span>
+              <span>
+                {t('24h high')} <span className="text-ink2">{fmtUsd(ticker.high24h)}</span>
+              </span>
+              <span>
+                {t('low')} <span className="text-ink2">{fmtUsd(ticker.low24h)}</span>
+              </span>
+              <span>
+                {t('volume')} <span className="text-ink2">{fmtCompactUsd(ticker.volume24hUsd)}</span>
+              </span>
+              <span>{t('via {source}', { source: ticker.source })}</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1 rounded-md border border-line px-1.5 py-0.5 text-xs text-ink2 hover:bg-raised" title={t('Language')}>
+            <Globe size={13} className="text-mute" />
+            <select
+              value={lang}
+              onChange={(e) => onLang(e.target.value as Lang)}
+              aria-label={t('Language')}
+              className="cursor-pointer bg-transparent py-0.5 text-xs text-ink2 outline-none [&>option]:bg-panel"
+            >
+              {LANGS.map((l) => (
+                <option key={l} value={l}>
+                  {LANG_NAME[l]}
+                </option>
+              ))}
+            </select>
+          </label>
           {onExplain && (
             <button
               onClick={() => onExplain(!explain)}
               role="switch"
               aria-checked={!!explain}
-              title={explain ? 'Explanations appear when you rest the cursor on a metric or a chart line. Click to turn them off.' : 'Turn on explanations when hovering metrics and chart lines.'}
+              title={explain ? t('Explanations appear when you rest the cursor on a metric or a chart line. Click to turn them off.') : t('Turn on explanations when hovering metrics and chart lines.')}
               className={clsx('flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs', explain ? 'border-accent/50 bg-accent/15 text-ink' : 'border-line text-mute hover:bg-raised')}
             >
-              <Info size={13} /> Hints {explain ? 'on' : 'off'}
+              <Info size={13} /> {explain ? t('Hints on') : t('Hints off')}
             </button>
           )}
-          <button onClick={onOpenData} className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink2 hover:bg-raised" title="Data source status">
+          <button onClick={onOpenData} className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink2 hover:bg-raised" title={t('Data source status')}>
             <span className={clsx('h-2 w-2 rounded-full', allLive ? 'bg-good' : sources.length ? 'bg-warn' : 'bg-mute')} />
-            {sources.length ? `${live}/${sources.length} sources live` : 'Connecting…'}
+            {sources.length ? t('{live}/{total} sources live', { live, total: sources.length }) : t('Connecting…')}
           </button>
-          <button onClick={onRefresh} disabled={refreshing} aria-label="Sync data now" title="Sync data now" className="rounded-md border border-line p-1.5 text-ink2 hover:bg-raised disabled:opacity-50">
+          <button onClick={onRefresh} disabled={refreshing} aria-label={t('Sync data now')} title={t('Sync data now')} className="rounded-md border border-line p-1.5 text-ink2 hover:bg-raised disabled:opacity-50">
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>

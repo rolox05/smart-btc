@@ -1,6 +1,7 @@
 import { HEATMAP_WINDOWS, TF_INFO, type HeatmapWindow, type LiquidationHeatmap as Heatmap } from '@smart-btc/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtCompactUsd, fmtUsd } from '../lib/format';
+import { LOCALE, useT } from '../lib/i18n';
 import { UI } from '../lib/palette';
 import { Note, Segmented } from './ui';
 
@@ -9,18 +10,20 @@ const AXIS_RIGHT = 64;
 const AXIS_BOTTOM = 22;
 
 /**
- * Sequential single-hue ramp for intensity: the chart surface at zero, through deep blue, to near-white.
- * A gamma above 1 holds ordinary levels back so the strongest clusters stand out.
+ * Coinglass-style ramp: empty price levels stay deep purple, and growing liquidation size moves
+ * through blue and teal to green and bright yellow for the largest clusters (a viridis-like scale,
+ * which also stays readable for colour-blind viewers).
  */
 const STOPS: [number, number, number][] = [
-  [26, 26, 25],
-  [13, 54, 107],
-  [37, 106, 191],
-  [109, 167, 236],
-  [205, 226, 251],
+  [42, 8, 69],
+  [65, 22, 112],
+  [59, 82, 139],
+  [33, 145, 140],
+  [94, 201, 98],
+  [253, 231, 37],
 ];
 function ramp(v: number): [number, number, number] {
-  const x = Math.pow(Math.max(0, Math.min(1, v)), 1.5) * (STOPS.length - 1);
+  const x = Math.pow(Math.max(0, Math.min(1, v)), 1.6) * (STOPS.length - 1);
   const i = Math.min(STOPS.length - 2, Math.floor(x));
   const f = x - i;
   return [0, 1, 2].map((k) => Math.round(STOPS[i][k] + (STOPS[i + 1][k] - STOPS[i][k]) * f)) as [number, number, number];
@@ -40,6 +43,7 @@ function decode(b64: string): Uint8Array {
  * Brighter cells mean more leveraged notional would be force-closed if price reached that level.
  */
 export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, loading }: { heatmap: Heatmap; window: HeatmapWindow; onWindow: (w: HeatmapWindow) => void; loading: boolean }) {
+  const { t, lang } = useT();
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(800);
@@ -164,14 +168,14 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
     for (let i = 0; i <= ticks; i++) {
       const c = first + Math.min(cols - 1, Math.round((i / ticks) * (cols - 1)));
       const d = new Date(heatmap.t[c] * 1000);
-      const day = `${d.getUTCDate()} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}`;
+      const day = `${d.getUTCDate()} ${d.toLocaleString(LOCALE[lang], { month: 'short', timeZone: 'UTC' })}`;
       const spanDays = (heatmap.t[total - 1] - heatmap.t[0]) / 86_400;
-      const label = spanDays <= 4 ? `${day} ${String(d.getUTCHours()).padStart(2, '0')}:00` : spanDays > 300 ? `${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}` : day;
+      const label = spanDays <= 4 ? `${day} ${String(d.getUTCHours()).padStart(2, '0')}:00` : spanDays > 300 ? `${d.toLocaleString(LOCALE[lang], { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}` : day;
       ctx.fillText(label, Math.max(30, Math.min(plotW - 30, xOf(c))), plotH + 5);
     }
     ctx.textAlign = 'left';
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heatmap, cells, width, cols, first, yMin, yMax]);
+  }, [heatmap, cells, width, cols, first, yMin, yMax, lang]);
 
   // What is under the cursor.
   let tip: { col: number; price: number; usd: number } | null = null;
@@ -188,18 +192,18 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
         <div className="num flex flex-wrap items-center gap-x-3 text-[11px] text-ink2">
-          <span className="font-semibold text-ink">BTC/USDT · estimated liquidation levels · {TF_INFO[heatmap.timeframe].label} bars</span>
-          <span>last {fmtUsd(last.c)}</span>
-          {loading && <span className="text-mute">loading {windowId}…</span>}
+          <span className="font-semibold text-ink">{t('BTC/USDT · estimated liquidation levels · {tf} bars', { tf: TF_INFO[heatmap.timeframe].label })}</span>
+          <span>{t('last {price}', { price: fmtUsd(last.c) })}</span>
+          {loading && <span className="text-mute">{t('loading {window}…', { window: windowId })}</span>}
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-[10px] text-mute">
-            <span>less</span>
+            <span>{t('less')}</span>
             <span className="h-2 w-24 rounded-full" style={{ background: GRADIENT }} />
-            <span>more · about {fmtCompactUsd(heatmap.maxUsd)} per cell</span>
+            <span>{t('more · about {usd} per cell', { usd: fmtCompactUsd(heatmap.maxUsd) })}</span>
           </div>
           <div className="thin-scroll max-w-full overflow-x-auto">
-            <Segmented label="Heatmap window" size="sm" value={windowId} onChange={onWindow} options={HEATMAP_WINDOWS.map((w) => ({ value: w, label: w }))} />
+            <Segmented label={t('Heatmap window')} size="sm" value={windowId} onChange={onWindow} options={HEATMAP_WINDOWS.map((w) => ({ value: w, label: w === 'All' ? t('All') : w }))} />
           </div>
         </div>
       </div>
@@ -214,7 +218,7 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
         }}
         onMouseLeave={() => setHover(null)}
       >
-        <canvas ref={canvas} style={{ width, height: HEIGHT }} className="block" role="img" aria-label="Heatmap of estimated liquidation levels by price and time, with hourly candles" />
+        <canvas ref={canvas} style={{ width, height: HEIGHT }} className="block" role="img" aria-label={t('Heatmap of estimated liquidation levels by price and time, with candles')} />
         {tip && hover && (
           <>
             <div className="pointer-events-none absolute top-0 w-px bg-mute/60" style={{ left: hover.x, height: plotH }} />
@@ -225,12 +229,12 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
             >
               <div className="font-medium text-ink">{fmtUsd(tip.price)}</div>
               <div className="text-ink2">
-                {new Date(heatmap.t[tip.col] * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC
+                {new Date(heatmap.t[tip.col] * 1000).toLocaleString(LOCALE[lang], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC
               </div>
               <div className="text-ink2">
-                Est. liquidations <span className="text-ink">{tip.usd > 0 ? `≈ ${fmtCompactUsd(tip.usd)}` : 'none'}</span>
+                {t('Est. liquidations')} <span className="text-ink">{tip.usd > 0 ? `≈ ${fmtCompactUsd(tip.usd)}` : t('none')}</span>
               </div>
-              <div className="text-mute">Candle close {fmtUsd(heatmap.candles[tip.col].c)}</div>
+              <div className="text-mute">{t('Candle close {price}', { price: fmtUsd(heatmap.candles[tip.col].c) })}</div>
             </div>
           </>
         )}
@@ -238,7 +242,7 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
 
       <div className="flex flex-col gap-1.5 border-t border-line p-3">
         <p className="text-[11px] leading-relaxed text-ink2">
-          Bright bands are price levels where many leveraged positions would be force-closed. Bands above price are short liquidations, bands below are long liquidations; price is often drawn toward the brightest nearby band, and a band ends where price traded through it.
+          {t('Bright bands are price levels where many leveraged positions would be force-closed. Bands above price are short liquidations, bands below are long liquidations; price is often drawn toward the brightest nearby band, and a band ends where price traded through it.')}
         </p>
         {heatmap.notes.map((n) => (
           <Note key={n}>{n}</Note>

@@ -1,5 +1,7 @@
 import { durationLabel, type MetricDef, type Timeframe } from '@smart-btc/shared';
 import { GUIDE } from './guide.js';
+import { EN, type T } from '../i18n/index.js';
+import { METRIC_TEXT } from '../i18n/metrics.js';
 
 /**
  * Metric catalogue. To add a metric: describe it here, compute it in dataset.ts,
@@ -163,6 +165,31 @@ const CATALOGUE: MetricDef[] = [
     forecastable: true, defaultVisible: false, defaultInModel: false,
     bands: [{ value: 0, label: '' }],
   },
+  {
+    id: 'puell', name: 'Puell multiple', short: 'Puell', group: 'onchain',
+    description: 'Daily value of newly mined coins ÷ its 365-day average: how flush miners are. Above ~4 has marked cycle tops, below ~0.5 miner capitulation near cycle lows.',
+    source: 'Coin Metrics', display: 'pane', pane: 'puell', unit: 'ratio', colorSlot: 3,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 4, label: 'Top zone' }, { value: 0.5, label: 'Capitulation' }],
+  },
+  {
+    id: 'exSupply', name: 'Supply on exchanges (% of supply)', short: 'Exch. supply', group: 'onchain',
+    description: 'Share of all bitcoin held in known exchange wallets. A falling share means coins are moving into self-custody; a rising one, coins becoming available to sell.',
+    source: 'Coin Metrics', display: 'pane', pane: 'exsupply', unit: 'pct', colorSlot: 6,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'txCount', name: 'Transactions per day (30d avg)', short: 'Transactions', group: 'onchain',
+    description: 'On-chain transactions per day, averaged over 30 days: a rough gauge of network use.',
+    source: 'Coin Metrics', display: 'pane', pane: 'tx', unit: 'index', colorSlot: 0,
+    forecastable: false, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'fees', name: 'Transaction fees (7d avg, USD/day)', short: 'Fees', group: 'onchain',
+    description: 'Fees paid to miners per day in USD, averaged over 7 days. Spikes mark crowded blocks, typically during speculative bursts.',
+    source: 'Coin Metrics + price', display: 'pane', pane: 'fees', unit: 'usd', colorSlot: 1,
+    forecastable: false, defaultVisible: false, defaultInModel: false,
+  },
 
   // ── derivatives ──
   {
@@ -173,17 +200,57 @@ const CATALOGUE: MetricDef[] = [
     bands: [{ value: 0, label: '' }],
   },
   {
-    id: 'oi', name: 'Open interest (Binance, USD)', short: 'Open interest', group: 'derivatives',
-    description: 'Notional value of open BTCUSDT perpetual contracts. History accumulates locally (the API only serves 30 days).',
-    source: 'Binance futures', display: 'pane', pane: 'oi', unit: 'usd', colorSlot: 0,
+    id: 'premium', name: 'Perp premium over spot (7d avg)', short: 'Perp premium', group: 'derivatives',
+    description: 'How far Binance perpetual futures trade above (or below) spot, averaged over 7 days. A wide premium means traders pay up for leverage on the long side.',
+    source: 'Binance futures', display: 'pane', pane: 'premium', unit: 'pct', colorSlot: 5,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 0, label: '' }],
+  },
+  {
+    id: 'hlFunding', name: 'Hyperliquid funding (7d avg, annualised)', short: 'HL funding', group: 'derivatives',
+    description: 'What longs pay shorts on Hyperliquid, the largest on-chain perpetuals exchange. A second view of crowding, from a different set of traders than Binance.',
+    source: 'Hyperliquid', display: 'pane', pane: 'funding', unit: 'pct', colorSlot: 6,
     forecastable: false, defaultVisible: false, defaultInModel: false,
   },
   {
+    id: 'oi', name: 'Open interest (Bybit, USD)', short: 'Open interest', group: 'derivatives',
+    description: 'Notional value of open BTCUSDT perpetual contracts on Bybit, daily since 2020.',
+    source: 'Bybit + price', display: 'pane', pane: 'oi', unit: 'usd', colorSlot: 0,
+    forecastable: false, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'oiChange30', name: 'Open interest change (30d)', short: 'OI Δ30d', group: 'derivatives',
+    description: 'Change in Bybit open interest (in BTC) over 30 days. Fast growth means leverage is building; a sharp fall, that positions were flushed out.',
+    source: 'Bybit', display: 'pane', pane: 'oichange', unit: 'pct', colorSlot: 7,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 0, label: '' }],
+  },
+  {
     id: 'lsRatio', name: 'Long/short account ratio', short: 'L/S ratio', group: 'derivatives',
-    description: 'Accounts net long ÷ accounts net short on Binance futures. Retail positioning gauge.',
-    source: 'Binance futures', display: 'pane', pane: 'ls', unit: 'ratio', colorSlot: 4,
+    description: 'Accounts net long ÷ accounts net short on Bybit perpetuals, daily since 2020. Retail positioning gauge.',
+    source: 'Bybit', display: 'pane', pane: 'ls', unit: 'ratio', colorSlot: 4,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 1, label: 'Balanced' }],
+  },
+  {
+    id: 'putCall', name: 'Options put/call ratio (open interest)', short: 'Put/call', group: 'derivatives',
+    description: 'Open interest in BTC put options ÷ call options on Deribit. Higher means more hedging against a fall. No free history: it builds up locally from the day the app first ran.',
+    source: 'Deribit', display: 'pane', pane: 'putcall', unit: 'ratio', colorSlot: 2,
     forecastable: false, defaultVisible: false, defaultInModel: false,
     bands: [{ value: 1, label: 'Balanced' }],
+  },
+  {
+    id: 'cotLevNet', name: 'CME leveraged funds net position (% of OI)', short: 'CME lev. funds', group: 'derivatives',
+    description: 'Hedge funds and other leveraged traders on CME Bitcoin futures: longs minus shorts, as a share of open interest. Weekly, from the CFTC Commitments of Traders report.',
+    source: 'CFTC', display: 'pane', pane: 'cot', unit: 'pct', colorSlot: 1,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 0, label: '' }],
+  },
+  {
+    id: 'cotAssetNet', name: 'CME asset managers net position (% of OI)', short: 'CME asset mgrs', group: 'derivatives',
+    description: 'Asset managers on CME Bitcoin futures: longs minus shorts, as a share of open interest. Weekly, from the CFTC Commitments of Traders report.',
+    source: 'CFTC', display: 'pane', pane: 'cot', unit: 'pct', colorSlot: 2,
+    forecastable: false, defaultVisible: false, defaultInModel: false,
   },
 
   // ── sentiment / liquidity / cycle ──
@@ -201,6 +268,38 @@ const CATALOGUE: MetricDef[] = [
     forecastable: true, defaultVisible: false, defaultInModel: false,
     bands: [{ value: 0, label: '' }],
   },
+  {
+    id: 'dxy', name: 'US dollar index (DXY)', short: 'DXY', group: 'macro',
+    description: 'The dollar against a basket of major currencies. A rising dollar has tended to weigh on bitcoin and other risk assets.',
+    source: 'Yahoo Finance', display: 'pane', pane: 'dxy', unit: 'ratio', colorSlot: 0,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'us10y', name: 'US 10-year Treasury yield', short: 'US 10y', group: 'macro',
+    description: 'Yield on 10-year US government bonds: the price of money. Fast rises tighten financial conditions.',
+    source: 'Yahoo Finance', display: 'pane', pane: 'us10y', unit: 'pct', colorSlot: 7,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'nasdaqMom', name: 'Nasdaq 30-day return', short: 'Nasdaq 30d', group: 'macro',
+    description: 'How the Nasdaq Composite moved over the last 30 days. Bitcoin has often traded with tech stocks in risk-on and risk-off waves.',
+    source: 'Yahoo Finance', display: 'pane', pane: 'macromom', unit: 'pct', colorSlot: 0,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 0, label: '' }],
+  },
+  {
+    id: 'goldMom', name: 'Gold 30-day return', short: 'Gold 30d', group: 'macro',
+    description: 'How gold moved over the last 30 days: the traditional store of value bitcoin is often compared with.',
+    source: 'Yahoo Finance', display: 'pane', pane: 'macromom', unit: 'pct', colorSlot: 3,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'ibitVolume', name: 'IBIT spot-ETF dollar volume (20d avg)', short: 'IBIT volume', group: 'macro',
+    description: 'Daily traded value of BlackRock\'s IBIT, the largest US spot bitcoin ETF, averaged over 20 days: a proxy for institutional activity. History since January 2024.',
+    source: 'Yahoo Finance', display: 'pane', pane: 'ibit', unit: 'usd', colorSlot: 4,
+    forecastable: false, defaultVisible: false, defaultInModel: false,
+  },
+
   {
     id: 'cycleDay', name: 'Days since halving', short: 'Since halving', group: 'cycle',
     description: 'Position in the four-year halving cycle. Backtests best of all inputs, but rests on only three completed cycles - treat it as a prior, not a law.',
@@ -220,23 +319,46 @@ const NATIVE = new Set(['sma200', 'sma50', 'bbUpper', 'supertrend', 'rsi14', 'mo
  * The catalogue as it reads on a given timeframe: bar-based indicators are renamed to say what they
  * span there, and daily metrics are marked as such.
  */
-export function metricsFor(tf: Timeframe): MetricDef[] {
-  if (tf === '1d') return METRICS;
-  const span = (bars: number) => durationLabel(tf, bars);
-  const renamed: Record<string, Partial<MetricDef>> = {
-    sma200: { name: `200-bar moving average (${span(200)})`, description: 'Average close of the last 200 bars on this timeframe.' },
-    sma50: { name: `50-bar moving average (${span(50)})`, description: 'Average close of the last 50 bars on this timeframe.' },
-    bbUpper: { description: `Two standard deviations around the 20-bar average (${span(20)}). Tight bands precede expansion.` },
-    rsi14: { description: `Relative Strength Index over 14 bars (${span(14)}). Above 70 is overbought, below 30 oversold.` },
-    mom30: { name: `${span(30)} return`, short: `Mom ${span(30)}`, description: `Price change over the last 30 bars (${span(30)}).` },
-    vol30: { name: 'Realized volatility (30 bars)', short: 'Vol 30', description: `Annualised standard deviation of returns over the last 30 bars (${span(30)}).` },
+/** A metric's display text in the requested language (structure and numbers are unchanged). */
+export function localizeMetric(m: MetricDef, t: T): MetricDef {
+  const tx = t.lang === 'en' ? undefined : METRIC_TEXT[t.lang]?.[m.id];
+  return {
+    ...m,
+    name: tx?.name ?? m.name,
+    short: tx?.short ?? m.short,
+    description: tx?.description ?? m.description,
+    source: t(m.source),
+    bands: m.bands?.map((b) => ({ ...b, label: b.label ? t(b.label) : '' })),
+    guide: m.guide && { read: tx?.read ?? m.guide.read, caveat: tx?.caveat ?? m.guide.caveat },
   };
-  return METRICS.map((m) => {
-    if (!NATIVE.has(m.id)) return { ...m, source: `${m.source} · daily value` };
-    const guide = m.guide && {
-      ...m.guide,
-      caveat: `${m.guide.caveat ? `${m.guide.caveat} ` : ''}Here it is computed on ${tf} bars, so it describes a shorter stretch than the daily version and turns more often.`,
-    };
+}
+
+/** Short name of a metric in the requested language. */
+export function metricShort(id: string, t: T): string {
+  const m = METRIC_BY_ID.get(id);
+  return m ? localizeMetric(m, t).short : id;
+}
+
+/**
+ * The catalogue as it reads on a given timeframe and language: bar-based indicators are renamed to say
+ * what they span there, and daily metrics are marked as such.
+ */
+export function metricsFor(tf: Timeframe, t: T = EN): MetricDef[] {
+  const base = METRICS.map((m) => localizeMetric(m, t));
+  if (tf === '1d') return base;
+  const span = (bars: number) => t.dur(tf, bars);
+  const renamed: Record<string, Partial<MetricDef>> = {
+    sma200: { name: t('200-bar moving average ({span})', { span: span(200) }), description: t('Average close of the last 200 bars on this timeframe.') },
+    sma50: { name: t('50-bar moving average ({span})', { span: span(50) }), description: t('Average close of the last 50 bars on this timeframe.') },
+    bbUpper: { description: t('Two standard deviations around the 20-bar average ({span}). Tight bands precede expansion.', { span: span(20) }) },
+    rsi14: { description: t('Relative Strength Index over 14 bars ({span}). Above 70 is overbought, below 30 oversold.', { span: span(14) }) },
+    mom30: { name: t('{span} return', { span: span(30) }), short: t('Mom {span}', { span: span(30) }), description: t('Price change over the last 30 bars ({span}).', { span: span(30) }) },
+    vol30: { name: t('Realized volatility (30 bars)'), short: t('Vol 30'), description: t('Annualised standard deviation of returns over the last 30 bars ({span}).', { span: span(30) }) },
+  };
+  return base.map((m) => {
+    if (!NATIVE.has(m.id)) return { ...m, source: t('{source} · daily value', { source: m.source }) };
+    const extra = t('Here it is computed on {tf} bars, so it describes a shorter stretch than the daily version and turns more often.', { tf });
+    const guide = m.guide && { ...m.guide, caveat: m.guide.caveat ? `${m.guide.caveat} ${extra}` : extra };
     return { ...m, ...renamed[m.id], guide };
   });
 }

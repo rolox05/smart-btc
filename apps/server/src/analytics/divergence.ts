@@ -1,4 +1,5 @@
-import { durationLabel, type AnnotationDef, type AnnotationPayload, type AnnotationSegment, type AnnotationStats } from '@smart-btc/shared';
+import { EN, type T } from '../i18n/index.js';
+import { type AnnotationDef, type AnnotationPayload, type AnnotationSegment, type AnnotationStats } from '@smart-btc/shared';
 import type { Dataset } from './dataset.js';
 
 /**
@@ -47,7 +48,10 @@ const median = (xs: number[]) => {
   return s[Math.floor(s.length / 2)];
 };
 
-function rsiDivergence(ds: Dataset): AnnotationPayload {
+/** The annotation catalogue in the requested language. */
+export const annotationsFor = (t: T): AnnotationDef[] => ANNOTATIONS.map((a) => ({ ...a, name: t(a.name), description: t(a.description) }));
+
+function rsiDivergence(ds: Dataset, t: T): AnnotationPayload {
   const rsi = ds.series.get('rsi14')!;
   const segments: AnnotationSegment[] = [];
   const confirmIdx: { kind: 'bullish' | 'bearish'; idx: number }[] = [];
@@ -114,7 +118,7 @@ function rsiDivergence(ds: Dataset): AnnotationPayload {
       : null;
     return {
       kind,
-      label: kind === 'bullish' ? 'Bullish divergence' : 'Bearish divergence',
+      label: kind === 'bullish' ? t('Bullish divergence') : t('Bearish divergence'),
       count: events.length,
       move,
       horizons: STUDY_HORIZONS.map((bars) => {
@@ -141,13 +145,13 @@ function rsiDivergence(ds: Dataset): AnnotationPayload {
     segments,
     stats,
     notes: [
-      `Pivots need ${WING} lower/higher bars on each side, so a divergence is only confirmed ${durationLabel(ds.tf, WING)} after the second turn. The statistics are measured from that confirmation bar.`,
-      `Rules: two consecutive RSI pivots ${MIN_GAP}–${MAX_GAP} bars apart; the first below ${BULL_ZONE} (bullish) or above ${BEAR_ZONE} (bearish).`,
+      t('Pivots need {wing} lower/higher bars on each side, so a divergence is only confirmed {dur} after the second turn. The statistics are measured from that confirmation bar.', { wing: WING, dur: t.dur(ds.tf, WING) }),
+      t('Rules: two consecutive RSI pivots {min}–{max} bars apart; the first below {bull} (bullish) or above {bear} (bearish).', { min: MIN_GAP, max: MAX_GAP, bull: BULL_ZONE, bear: BEAR_ZONE }),
     ],
   };
 }
 
-export function buildAnnotation(ds: Dataset, id: string): AnnotationPayload | null {
-  if (id === 'rsiDivergence') return rsiDivergence(ds);
+export function buildAnnotation(ds: Dataset, id: string, t: T = EN): AnnotationPayload | null {
+  if (id === 'rsiDivergence') return rsiDivergence(ds, t);
   return null;
 }

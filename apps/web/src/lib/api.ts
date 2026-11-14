@@ -1,3 +1,4 @@
+import { getLang, tr } from './i18n';
 import type {
   HeatmapWindow,
   LiquidationHeatmap,
@@ -34,15 +35,15 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
   try {
     res = await fetch(path, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      headers: body === undefined ? { 'x-lang': getLang() } : { 'content-type': 'application/json', 'x-lang': getLang() },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError('Cannot reach the local API server. Is it running?', 0);
+    throw new ApiError(tr('Cannot reach the local API server. Is it running?'), 0);
   }
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiError(payload?.error ?? `Request failed (${res.status})`, res.status);
+    throw new ApiError(payload?.error ?? tr('Request failed ({status})', { status: res.status }), res.status);
   }
   return (await res.json()) as T;
 }

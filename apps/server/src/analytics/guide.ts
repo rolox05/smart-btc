@@ -140,6 +140,92 @@ export const GUIDE: Record<string, NonNullable<MetricDef['guide']>> = {
     ],
     caveat: 'In a sustained trend it can stay beyond a band for weeks. The free feed is delayed 7 days and covers 4 years, so the bands only start in 2023; the line follows a published Glassnode chart in spirit, not its exact formula.',
   },
+  puell: {
+    read: [
+      'Miners sell part of what they mine to cover costs, so their income shapes steady selling pressure. Above ~4 they earn far more than usual and selling tends to rise; past cycle tops sat there.',
+      'Below ~0.5 miners earn far less than usual and the weakest shut down: historically a capitulation zone near cycle lows.',
+    ],
+    caveat: 'Each halving cuts issuance in half, so readings shift abruptly around halvings, and fees play a growing role.',
+  },
+  exSupply: {
+    read: [
+      'Share of all coins sitting in known exchange wallets. A steady decline means holders are moving coins into self-custody, which shrinks readily sellable supply.',
+      'A rising share means coins are flowing onto exchanges, often ahead of selling.',
+    ],
+    caveat: 'Exchange wallet labelling is imperfect, and spot ETFs and custodians hold coins outside exchanges, so the long-term trend is clearer than short swings.',
+  },
+  txCount: {
+    read: ['Average number of on-chain transactions per day over 30 days. Rising use alongside rising price is a healthier rally than price alone.'],
+    caveat: 'Transaction batching, layer-2 networks and inscription waves change the count without saying much about demand for bitcoin itself.',
+  },
+  fees: {
+    read: ['Total fees paid to miners per day in USD. Spikes mark crowded blocks, usually during speculative bursts or market stress.'],
+    caveat: 'A single wave of inscriptions or a congested week can dominate the series.',
+  },
+  premium: {
+    read: [
+      'Positive: perpetual futures trade above spot because traders pay up for leveraged longs. A wide, persistent premium is a sign of crowding.',
+      'Negative: perps trade below spot, which tends to happen after flushes and in fearful markets.',
+    ],
+    caveat: 'Only Binance, and only since late 2019, so as a model input it shortens the analog history.',
+  },
+  hlFunding: {
+    read: [
+      'Same idea as the Binance funding rate, measured on Hyperliquid. When both are high at once, crowding is broad rather than limited to one venue.',
+    ],
+    caveat: 'History only starts in mid-2023, so it is shown on the chart but not offered as a model input.',
+  },
+  oiChange30: {
+    read: [
+      'Above ~+20%: open interest has grown fast, meaning new leverage is entering. Rallies built on leverage are prone to sharp liquidation cascades.',
+      'Below ~−20%: positions were closed or liquidated; leverage has been washed out, which often clears the way for a calmer trend.',
+    ],
+    caveat: 'Bybit only and measured in BTC, history since 2020. As a model input it shortens the analog history to that period.',
+  },
+  putCall: {
+    read: [
+      'Above 1: more open put options than calls, so traders are hedging against a fall. Very high readings often come near local lows, when fear is priced in.',
+      'Below ~0.6: call-heavy, optimistic positioning.',
+    ],
+    caveat: 'There is no free history: the line builds up locally from the day you first ran the app, one value per day.',
+  },
+  cotLevNet: {
+    read: [
+      'Hedge funds on CME are usually net short because they run basis trades (long spot or ETFs, short futures), so a negative reading is normal.',
+      'Moves away from their usual level matter more than the sign: a short position that unwinds quickly can add buying pressure.',
+    ],
+    caveat: 'Weekly data, published three days after the positions are recorded, and the basis trade blurs the directional message.',
+  },
+  cotAssetNet: {
+    read: ['Asset managers on CME are mostly net long: a gauge of institutional directional exposure through futures.'],
+    caveat: 'Weekly, published with a three-day delay; spot ETFs now carry much of the institutional exposure outside futures.',
+  },
+  dxy: {
+    read: [
+      'A rising dollar tightens global financial conditions and has tended to weigh on bitcoin; a falling dollar has tended to help.',
+      'As a model input the 30-day change is used rather than the level.',
+    ],
+    caveat: 'The relationship is loose and changes over time; there are long stretches where bitcoin ignores the dollar.',
+  },
+  us10y: {
+    read: [
+      'Higher long-term yields make cash and bonds more attractive and tend to pressure speculative assets, especially when they rise fast.',
+      'As a model input the 30-day change in percentage points is used.',
+    ],
+    caveat: 'Yields can rise for good reasons (strong growth) as well as bad ones, so the direction alone is ambiguous.',
+  },
+  nasdaqMom: {
+    read: ['Bitcoin has often moved with tech stocks during risk-on and risk-off waves. A sharp Nasdaq drop has tended to drag bitcoin with it.'],
+    caveat: 'The correlation comes and goes; in some periods bitcoin trades on its own story.',
+  },
+  goldMom: {
+    read: ['Gold and bitcoin are both seen as hedges against currency debasement; strong gold momentum sometimes precedes bitcoin catching up.'],
+    caveat: 'The link is weak and inconsistent; treat it as context.',
+  },
+  ibitVolume: {
+    read: ['Average daily traded value of the largest US spot bitcoin ETF. Volume surges mark periods of heavy institutional activity, in either direction.'],
+    caveat: 'Volume is not net flow: it does not say whether money came in or went out. History only since January 2024.',
+  },
   sthSopr: {
     read: [
       'Whether coins sold by recent buyers were sold at a profit (above 1) or a loss (below 1), averaged over 7 days.',
@@ -173,14 +259,14 @@ export const GUIDE: Record<string, NonNullable<MetricDef['guide']>> = {
       'The value of open futures positions. Rising with price: new money backing the move. Rising while price stalls: leverage building, liquidation risk growing.',
       'A sharp drop means positions were closed or liquidated - a "flush" that often clears the way.',
     ],
-    caveat: 'Only Binance, and the history builds up locally from the day you first ran the app.',
+    caveat: 'Bybit only (one large exchange among several), daily since 2020.',
   },
   lsRatio: {
     read: [
       'Accounts net long divided by accounts net short. It counts accounts, not money, so it mostly reflects small traders.',
       'Often read as a contrarian gauge: very high readings mean the crowd is long.',
     ],
-    caveat: 'Short local history, and the ratio sits above 1 most of the time.',
+    caveat: 'The ratio sits above 1 most of the time, so compare it with its own history rather than with 1.',
   },
   fng: {
     read: [

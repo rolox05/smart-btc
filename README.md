@@ -47,6 +47,11 @@ Environment variables: `API_PORT` (4747), `API_HOST` (127.0.0.1), `DATA_DIR` (`.
   rescale with it. On-chain, derivatives, sentiment and pullback-counter metrics are daily figures on
   every timeframe (each bar sees the last completed day). Intraday candles come from Binance
   (15m: last 3 years; 1h and 4h: since 2017); weekly and monthly bars are built from daily history.
+- **Language.** English, Spanish or Portuguese, chosen in the header (the first visit follows the
+  browser language). Interface text lives in `apps/web/src/locales`, server-generated text (readings,
+  forecast sentences, warnings) in `apps/server/src/i18n`, and metric descriptions and reading guides
+  in `apps/server/src/i18n/metrics.ts`. Translations are keyed by the English text: edit the tables in
+  `scripts/i18n/*.py`, run `npm run i18n:build`, and `npm run i18n:check` lists any string still missing.
 - **Hints.** The "Hints" switch in the header turns hover explanations on or off: rest the cursor on
   a metric, a chart layer, or a line, level or marker on the chart to see what it means.
 
@@ -67,14 +72,21 @@ Environment variables: `API_PORT` (4747), `API_HOST` (127.0.0.1), `DATA_DIR` (`.
 
 ## How the forecast works
 
-1. Today is described by the readings of the metrics selected as model inputs.
-2. The model finds the `k` most similar past days (root-mean-square z-score distance), keeping
-   them at least a few days apart so one episode cannot dominate.
+1. Today is described by the readings of the metrics selected as model inputs, taken at the last
+   **closed** bar (the forming bar is only used for the starting price). Coin Metrics inputs are
+   lagged one day because they are published a few hours after each day closes.
+2. The model finds the `k` most similar past days with a Mahalanobis distance (inputs are
+   whitened with their past-only covariance, so correlated inputs are not counted twice), keeping
+   them at least a few days apart so one episode cannot dominate. Closer analogs weigh more
+   (Gaussian kernel, bandwidth = median analog distance).
 3. What price did after each of those days, rescaled to today's volatility, is one possible path.
    The analog paths are blended with the all-history base rate (50% by default) to tame the noise
    of a small sample.
 4. Scenario probabilities, targets, timings, touch odds and stop/target outcomes are weighted
    counts over those paths.
+   The reported effective sample counts *independent* analogs: analogs closer together than the
+   horizon share part of their future, so their outcomes are discounted (1 / ΣΣ wⱼwₖρⱼₖ with
+   ρ = overlap of the two forward windows).
 5. The **walk-forward backtest** repeats 1–4 for each past date using only data available then
    (analogs must have fully played out; standardisation uses past data only) and scores the
    probabilities with the Brier skill score against the base rate known on that date.
@@ -84,6 +96,11 @@ rate for direction; the range and touch probabilities are well calibrated (the 8
 the outcome about 80% of the time), which is what matters for placing stops and targets. The app
 tells you which case you are in rather than assuming an edge.
 
+Model choices are compared with `npx tsx scripts/model-bench.mts`, which runs the same walk-forward
+backtest for several variants (distance, kernel, analog spacing, adaptive blending, `k`) at 7, 30
+and 90 days. Only variants that won consistently are defaults; picking them on the same history is
+still mild over-fitting, so treat small skill differences as noise.
+
 ## Data sources
 
 | Source | Used for | Notes |
@@ -91,12 +108,18 @@ tells you which case you are in rather than assuming an edge.
 | Binance spot (`api.binance.com`, mirror `data-api.binance.vision`) | Daily candles since 2017, live price, hourly candles, order book | Mirror is used automatically where the main host is blocked |
 | Bitstamp | Daily candles 2011–2017, fallback price feed, order book | |
 | Binance USD-M futures | Funding since 2019, open interest, long/short ratio | OI and L/S are only served for 30 days; history accumulates locally |
-| Coin Metrics Community | MVRV / realized price, market cap, supply, exchange flows | Since 2010 |
+| Coin Metrics Community | MVRV / realized price, market cap, supply, exchange flows and balances, issuance (Puell multiple), fees, transactions | Since 2010 |
 | BGeometrics (bitcoin-data.com) | Short-term-holder realized price, STH-SOPR | Free tier: last 4 years, delayed 7 days, 15 requests/day (synced once a day) |
 | Deribit | DVOL implied volatility | Since 2021 |
 | alternative.me | Fear & Greed index | Since 2018 |
 | DefiLlama | Total stablecoin supply | Since 2017 |
 | Coinbase, Kraken | Order book depth | |
+| Bybit | Open interest and long/short account ratio | Daily since 2020 |
+| Binance premium index | Perpetual premium over spot | Daily since Dec 2019 |
+| Hyperliquid | Funding on the largest on-chain perpetuals exchange | Hourly since May 2023 |
+| Deribit options | Put/call open-interest ratio | Live only; history builds up locally |
+| CFTC Commitments of Traders | CME Bitcoin futures positioning (leveraged funds, asset managers) | Weekly since 2018, stored on the publication day |
+| Yahoo Finance | US dollar index, 10-year yield, Nasdaq, gold, IBIT ETF volume | Daily since 2010 (IBIT since 2024); unofficial endpoint |
 
 Delayed series are lagged by the same amount inside the model, so the backtest only ever sees
 what would have been available live.

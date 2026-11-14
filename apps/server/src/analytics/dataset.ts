@@ -1,4 +1,5 @@
-import { DAY, TF_INFO, addBars, type Candle, type MetricSnapshot, type Timeframe } from '@smart-btc/shared';
+import { DAY, TF_INFO, addBars, type Candle, type MetricSnapshot, type Timeframe, type Vars } from '@smart-btc/shared';
+import { EN, type T } from '../i18n/index.js';
 import type { Point, Store } from '../store/store.js';
 import {
   type Arr,
@@ -49,6 +50,18 @@ export interface Dataset {
   atr14: Arr;
   /** Average perp funding per day (fraction of notional), trailing 7 days. */
   fundingPerDay: Arr;
+  /**
+   * Index of the last bar that has closed. The final bar is usually still forming (today, this week,
+   * this month); model inputs must come from closed bars, exactly like every bar the backtest scores.
+   */
+  lastClosed: number;
+}
+
+/** Index of the last bar whose close time has passed. */
+export function lastClosedIndex(t: number[], tf: Timeframe, nowSec = Date.now() / 1000): number {
+  let i = t.length - 1;
+  while (i > 0 && addBars(tf, t[i], 1) > nowSec) i--;
+  return i;
 }
 
 /** Metrics recomputed on each timeframe's own bars. Everything else is a daily metric sampled onto the bars. */
@@ -134,6 +147,10 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
     'cm.mvrv', 'cm.mcap', 'cm.supply', 'cm.flowIn', 'cm.flowOut',
     'bg.sthRealizedPrice', 'bg.sthSopr', 'fng', 'deribit.dvol', 'llama.stables',
     'binance.funding', 'binance.oi', 'binance.lsRatio',
+    'cm.issUsd', 'cm.exSupply', 'cm.txCnt', 'cm.feesBtc', 'cm.price',
+    'bybit.oi', 'bybit.lsRatio', 'binance.premium', 'hl.funding', 'deribit.putCall',
+    'cftc.levNet', 'cftc.assetNet',
+    'yahoo.dxy', 'yahoo.us10y', 'yahoo.nasdaq', 'yahoo.gold', 'yahoo.ibitVol',
   ] as const;
   const raw = Object.fromEntries(
     await Promise.all(ids.map(async (id) => [id, await store.getPoints(id)] as const)),
@@ -171,7 +188,9 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   // Using today's price over the latest cost basis keeps MVRV live even though the source is a day behind.
   const mvrv = map(realizedPrice, (rp, i) => c[i] / rp);
   series.set('mvrv', mvrv);
-  features.set('mvrv', ln(mvrv));
+  // Coin Metrics publishes each day's figures a few hours after the day closes, so model inputs built
+  // on them use the previous day's value: exactly what was available at the close.
+  features.set('mvrv', lag(ln(mvrv), 1));
   fresh.set('mvrv', lastValid(realizedRaw));
 
   const sthRaw = align(raw['bg.sthRealizedPrice']);
@@ -240,7 +259,7 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   const netflowRaw = map(net7, (a, i) => (a / cmMcap[i]) * 100);
   const netflow = ffill(netflowRaw, 5);
   series.set('exchNetflow', netflow);
-  features.set('exchNetflow', netflow);
+  features.set('exchNetflow', lag(netflow, 1));
   fresh.set('exchNetflow', lastValid(netflowRaw));
 
   // ── derivatives ──
@@ -259,12 +278,125 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   const funding = map(fundingPerDay, (a) => a * 365 * 100);
   series.set('funding', funding);
   features.set('funding', funding);
-  const oiRaw = align(raw['binance.oi']);
-  series.set('oi', ffill(oiRaw, 2));
-  fresh.set('oi', lastValid(oiRaw));
-  const lsRaw = align(raw['binance.lsRatio']);
-  series.set('lsRatio', ffill(lsRaw, 2));
-  fresh.set('lsRatio', lastValid(lsRaw));
+  // Perp premium over spot: Binance premium index, 7-day average, in %.
+  const premRaw = align(raw['binance.premium']);
+  const premium = map(sma(ffill(premRaw, 2), 7), (a) => a * 100);
+  series.set('premium', premium);
+  features.set('premium', premium);
+  fresh.set('premium', lastValid(premRaw));
+
+  // Hyperliquid pays funding hourly: average the hourly rates per day, then 7 days, annualised in %.
+  const hlSum = new Float64Array(n);
+  const hlCnt = new Float64Array(n);
+  for (const p of raw['hl.funding']) {
+    const i = Math.floor((p.t - t0) / DAY);
+    if (i < 0 || i >= n) continue;
+    hlSum[i] += p.v;
+    hlCnt[i] += 1;
+  }
+  const hlSum7 = rollingSum(hlSum, 7);
+  const hlCnt7 = rollingSum(hlCnt, 7);
+  const hlFunding = map(hlSum7, (x, i) => (hlCnt7[i] >= 72 ? (x / hlCnt7[i]) * 24 * 365 * 100 : NaN));
+  series.set('hlFunding', hlFunding);
+  fresh.set('hlFunding', lastValid(hlFunding));
+
+  // Open interest: Bybit (daily since 2020, in BTC), shown in USD; Binance's 30-day series fills in if Bybit is missing.
+  const oiBtc = ffill(align(raw['bybit.oi']), 3);
+  const binanceOi = ffill(align(raw['binance.oi']), 2);
+  const oiUsd = map(c, (px, i) => (Number.isNaN(oiBtc[i]) ? binanceOi[i] : oiBtc[i] * px));
+  series.set('oi', oiUsd);
+  fresh.set('oi', lastValid(align(raw['bybit.oi'])));
+  const oiChange30 = pctChange(oiBtc, 30);
+  series.set('oiChange30', oiChange30);
+  features.set('oiChange30', oiChange30);
+  fresh.set('oiChange30', lastValid(align(raw['bybit.oi'])));
+
+  // Long/short ratio: Bybit (since 2020), with Binance filling any day Bybit lacks.
+  const lsBybit = align(raw['bybit.lsRatio']);
+  const lsBinance = align(raw['binance.lsRatio']);
+  const lsBybitFilled = ffill(lsBybit, 2);
+  const lsBinanceFilled = ffill(lsBinance, 2);
+  const lsRatio = Float64Array.from(lsBinanceFilled);
+  for (let i = 0; i < n; i++) if (!Number.isNaN(lsBybitFilled[i])) lsRatio[i] = lsBybitFilled[i];
+  series.set('lsRatio', lsRatio);
+  features.set('lsRatio', ln(lsBybitFilled));
+  fresh.set('lsRatio', Math.max(lastValid(lsBybit), lastValid(lsBinance)));
+
+  const putCallRaw = align(raw['deribit.putCall']);
+  series.set('putCall', ffill(putCallRaw, 2));
+  fresh.set('putCall', lastValid(putCallRaw));
+
+  // CFTC report values are stored on their publication day and carried until the next report.
+  const levRaw = align(raw['cftc.levNet']);
+  const cotLevNet = ffill(levRaw, 10);
+  series.set('cotLevNet', cotLevNet);
+  features.set('cotLevNet', cotLevNet);
+  fresh.set('cotLevNet', lastValid(levRaw));
+  const assetRaw = align(raw['cftc.assetNet']);
+  series.set('cotAssetNet', ffill(assetRaw, 10));
+  fresh.set('cotAssetNet', lastValid(assetRaw));
+
+  // ── more on-chain: Puell multiple, exchange balances, activity, fees ──
+  const issRaw = align(raw['cm.issUsd']);
+  const iss = ffill(issRaw, 3);
+  const puell = map(sma(iss, 365), (avg, i) => iss[i] / avg);
+  series.set('puell', puell);
+  features.set('puell', lag(ln(puell), 1));
+  fresh.set('puell', lastValid(issRaw));
+
+  const exRaw = align(raw['cm.exSupply']);
+  const supplyFilled = ffill(cmSupply, 5);
+  const exSupply = map(ffill(exRaw, 5), (x, i) => (x / supplyFilled[i]) * 100);
+  series.set('exSupply', exSupply);
+  // As a model input, the 30-day change matters more than the slowly drifting level.
+  features.set('exSupply', lag(map(exSupply, (x, i) => (i >= 30 ? x - exSupply[i - 30] : NaN)), 1));
+  fresh.set('exSupply', lastValid(exRaw));
+
+  const txRaw = align(raw['cm.txCnt']);
+  series.set('txCount', sma(ffill(txRaw, 3), 30));
+  fresh.set('txCount', lastValid(txRaw));
+  const feesRaw = align(raw['cm.feesBtc']);
+  series.set('fees', sma(map(ffill(feesRaw, 3), (f, i) => f * c[i]), 7));
+  fresh.set('fees', lastValid(feesRaw));
+
+  // ── macro (Yahoo Finance): markets close at weekends, so values carry over up to 4 days ──
+  const dxyRaw = align(raw['yahoo.dxy']);
+  const dxy = ffill(dxyRaw, 4);
+  series.set('dxy', dxy);
+  features.set('dxy', pctChange(dxy, 30));
+  fresh.set('dxy', lastValid(dxyRaw));
+  const tnxRaw = align(raw['yahoo.us10y']);
+  const us10y = ffill(tnxRaw, 4);
+  series.set('us10y', us10y);
+  features.set('us10y', map(us10y, (x, i) => (i >= 30 ? x - us10y[i - 30] : NaN)));
+  fresh.set('us10y', lastValid(tnxRaw));
+  const ndxRaw = align(raw['yahoo.nasdaq']);
+  const nasdaqMom = pctChange(ffill(ndxRaw, 4), 30);
+  series.set('nasdaqMom', nasdaqMom);
+  features.set('nasdaqMom', nasdaqMom);
+  fresh.set('nasdaqMom', lastValid(ndxRaw));
+  const goldRaw = align(raw['yahoo.gold']);
+  const goldMom = pctChange(ffill(goldRaw, 4), 30);
+  series.set('goldMom', goldMom);
+  features.set('goldMom', goldMom);
+  fresh.set('goldMom', lastValid(goldRaw));
+  const ibitRaw = align(raw['yahoo.ibitVol']);
+  // Weekend days count as zero-volume days would distort the average, so average trading days only.
+  const ibitTrading = new Float64Array(n).fill(NaN);
+  {
+    const vals: number[] = [];
+    let lastTrade = -Infinity;
+    for (let i = 0; i < n; i++) {
+      if (!Number.isNaN(ibitRaw[i])) {
+        vals.push(ibitRaw[i]);
+        if (vals.length > 20) vals.shift();
+        lastTrade = i;
+      }
+      if (vals.length >= 10 && i - lastTrade <= 4) ibitTrading[i] = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+  }
+  series.set('ibitVolume', ibitTrading);
+  fresh.set('ibitVolume', lastValid(ibitRaw));
 
   // ── sentiment / volatility / liquidity / cycle ──
   const fngRaw = align(raw['fng']);
@@ -317,6 +449,7 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
     vol90: realizedVol(c, 90),
     atr14: atr(h, l, c, 14),
     fundingPerDay: ffill(fundingPerDay, 3),
+    lastClosed: lastClosedIndex(t, '1d'),
   };
 }
 
@@ -424,13 +557,14 @@ async function buildFromDaily(store: Store, daily: Dataset, tf: Exclude<Timefram
     vol90: realizedVol(c, 90, info.barsPerYear),
     atr14: atr(h, l, c, 14),
     fundingPerDay: sample(daily.fundingPerDay),
+    lastClosed: lastClosedIndex(t, tf),
   };
 }
 
 // ───────────────────────── snapshot ─────────────────────────
 
-function describe(id: string, v: number, pct: number): { reading: string; tone: MetricSnapshot['tone'] } {
-  const r = (reading: string, tone: MetricSnapshot['tone'] = 'neutral') => ({ reading, tone });
+function describe(id: string, v: number, pct: number, t: T): { reading: string; tone: MetricSnapshot['tone'] } {
+  const r = (reading: string, tone: MetricSnapshot['tone'] = 'neutral', vars?: Vars) => ({ reading: reading ? t(reading, vars) : '', tone });
   switch (id) {
     case 'rsi14':
       if (v >= 70) return r('Overbought', 'bearish');
@@ -460,18 +594,32 @@ function describe(id: string, v: number, pct: number): { reading: string; tone: 
       if (v < 0) return r('Shorts paying longs', 'bullish');
       return r('Normal');
     case 'ddAth':
-      return v > -5 ? r('At / near all-time high', 'bullish') : v < -50 ? r('Deep bear-market drawdown') : r(`${Math.abs(v).toFixed(0)}% below ATH`);
+      return v > -5 ? r('At / near all-time high', 'bullish') : v < -50 ? r('Deep bear-market drawdown') : r('{pct}% below ATH', 'neutral', { pct: Math.abs(v).toFixed(0) });
     case 'ddDays10':
     case 'ddDays15':
     case 'ddDays20':
     case 'ddDays25':
     case 'ddDays30':
     case 'ddDays35':
-      return pct >= 90 ? r('Unusually long calm stretch') : v <= 3 ? r('Pullback just happened') : r(`${v.toFixed(0)} days`);
+      return pct >= 90 ? r('Unusually long calm stretch') : v <= 3 ? r('Pullback just happened') : r('{n} days', 'neutral', { n: v.toFixed(0) });
     case 'exchNetflow':
       return v > 0 ? r('Net inflow to exchanges', 'bearish') : r('Net outflow from exchanges', 'bullish');
     case 'stableGrowth':
       return v > 2 ? r('Buying power expanding', 'bullish') : v < 0 ? r('Buying power shrinking', 'bearish') : r('Flat');
+    case 'puell':
+      if (v >= 4) return r('Miners in a historic top zone', 'bearish');
+      if (v <= 0.5) return r('Miner capitulation zone', 'bullish');
+      return v >= 1.5 ? r('Miners earning above average') : v < 0.8 ? r('Miners earning below average') : r('Normal');
+    case 'premium':
+      if (v > 0.05) return r('Perps at a rich premium', 'bearish');
+      return v < 0 ? r('Perps at a discount to spot', 'bullish') : r('Normal');
+    case 'oiChange30':
+      if (v > 20) return r('Leverage building fast', 'bearish');
+      return v < -20 ? r('Leverage flushed out', 'bullish') : r('Normal');
+    case 'putCall':
+      return v > 1 ? r('More puts than calls') : v < 0.6 ? r('Call-heavy positioning') : r('Balanced');
+    case 'cotLevNet':
+      return v < -20 ? r('Leveraged funds heavily short') : v > 20 ? r('Leveraged funds heavily long') : r('Neutral');
     case 'lsRatio':
       return v > 2.5 ? r('Retail heavily long', 'bearish') : v < 1 ? r('Retail net short', 'bullish') : r('Retail leaning long');
     case 'sma200':
@@ -487,12 +635,12 @@ function describe(id: string, v: number, pct: number): { reading: string; tone: 
   return r('Mid-range');
 }
 
-export function snapshot(ds: Dataset): MetricSnapshot[] {
+export function snapshot(ds: Dataset, t: T = EN): MetricSnapshot[] {
   const price = ds.c[ds.n - 1];
   return METRICS.map((m) => {
     const x = ds.series.get(m.id);
     const empty: MetricSnapshot = {
-      id: m.id, value: null, percentile: null, change7d: null, reading: 'No data yet', tone: 'neutral', since: null, lastFresh: null,
+      id: m.id, value: null, percentile: null, change7d: null, reading: t('No data yet'), tone: 'neutral', since: null, lastFresh: null,
     };
     if (!x) return empty;
     let last = -1;
@@ -515,17 +663,17 @@ export function snapshot(ds: Dataset): MetricSnapshot[] {
     }
     const percentile = total > 30 ? (below / total) * 100 : null;
     const prev = last >= 7 ? x[last - 7] : NaN;
-    let { reading, tone } = describe(m.id, value, percentile ?? 50);
+    let { reading, tone } = describe(m.id, value, percentile ?? 50, t);
     if (m.id === 'sthBehavior') {
       const up = ds.series.get('sthBehaviorUpper')?.[last];
       const lo = ds.series.get('sthBehaviorLower')?.[last];
-      if (up != null && value > up) [reading, tone] = ['Above +1σ: recent buyers stretched in profit', 'bearish'];
-      else if (lo != null && value < lo) [reading, tone] = ['Below −1σ: recent buyers capitulating', 'bullish'];
-      else [reading, tone] = ['Inside the ±1σ band', 'neutral'];
+      if (up != null && value > up) [reading, tone] = [t('Above +1σ: recent buyers stretched in profit'), 'bearish'];
+      else if (lo != null && value < lo) [reading, tone] = [t('Below −1σ: recent buyers capitulating'), 'bullish'];
+      else [reading, tone] = [t('Inside the ±1σ band'), 'neutral'];
     }
     if (m.display === 'overlay' && m.unit === 'price') {
       const diff = (price / value - 1) * 100;
-      reading = `Price ${diff >= 0 ? 'above' : 'below'} by ${Math.abs(diff).toFixed(1)}%`;
+      reading = t(diff >= 0 ? 'Price above by {pct}%' : 'Price below by {pct}%', { pct: Math.abs(diff).toFixed(1) });
       tone = m.id.startsWith('bb') ? 'neutral' : diff >= 0 ? 'bullish' : 'bearish';
     }
     const freshT = ds.freshT.get(m.id);

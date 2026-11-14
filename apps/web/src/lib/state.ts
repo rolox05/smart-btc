@@ -1,4 +1,4 @@
-import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings, type HeatmapWindow, type MetricDef } from '@smart-btc/shared';
+import { DEFAULT_FORECAST_SETTINGS, pickLang, type ForecastSettings, type HeatmapWindow, type Lang, type MetricDef } from '@smart-btc/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type TabId = 'forecast' | 'odds' | 'trade' | 'backtest' | 'ranking' | 'liquidity' | 'guide' | 'data';
@@ -25,6 +25,8 @@ export interface TradeForm {
 }
 
 export interface AppState {
+  /** Interface language. */
+  lang: Lang;
   /** Metric ids drawn on the chart. null = catalogue defaults. */
   visible: string[] | null;
   /** Metric ids used as model inputs. null = catalogue defaults. */
@@ -51,6 +53,7 @@ export interface AppState {
 const { features: _unused, ...baseSettings } = DEFAULT_FORECAST_SETTINGS;
 
 export const DEFAULT_STATE: AppState = {
+  lang: pickLang(typeof navigator !== 'undefined' ? navigator.languages?.join(',') || navigator.language : 'en'),
   visible: null,
   model: null,
   annotations: [],

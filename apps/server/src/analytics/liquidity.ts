@@ -1,5 +1,6 @@
 import type { Candle, DepthBucket, HeatmapWindow, LiquidationHeatmap, LiquidityLevel, LiquidityReport } from '@smart-btc/shared';
 import { fetchJson, fetchJsonAny, ttlCache } from '../lib/http.js';
+import { EN, type T } from '../i18n/index.js';
 import { BINANCE_FUTURES, BINANCE_SPOT_HOSTS, fetchKlines } from '../providers/binance.js';
 import type { Dataset } from './dataset.js';
 
@@ -45,7 +46,7 @@ async function fetchBooks(): Promise<Book[]> {
 const BUCKET_PCT = 0.25;
 const RANGE_PCT = 20;
 
-function analyseBooks(books: Book[], mid: number) {
+function analyseBooks(books: Book[], mid: number, t: T) {
   const nb = Math.round((2 * RANGE_PCT) / BUCKET_PCT);
   const bid = new Float64Array(nb);
   const ask = new Float64Array(nb);
@@ -97,8 +98,8 @@ function analyseBooks(books: Book[], mid: number) {
         kind: 'orderbook',
         strength: usd / max,
         notionalUsd: usd,
-        label: side === 'ask' ? 'Ask wall' : 'Bid wall',
-        detail: `${(usd / median).toFixed(1)}× the median ${BUCKET_PCT}% bucket`,
+        label: side === 'ask' ? t('Ask wall') : t('Bid wall'),
+        detail: t('{x}× the median {pct}% bucket', { x: (usd / median).toFixed(1), pct: BUCKET_PCT }),
       });
     }
   }
@@ -146,7 +147,7 @@ function unsweptPivots(bars: Candle[], wing: number, tf: string): Pivot[] {
   return out;
 }
 
-function swingPools(pivots: Pivot[], price: number, now: number): LiquidityLevel[] {
+function swingPools(pivots: Pivot[], price: number, now: number, t: T): LiquidityLevel[] {
   const levels: LiquidityLevel[] = [];
   for (const side of ['buy-side', 'sell-side'] as const) {
     const ps = pivots
@@ -174,8 +175,11 @@ function swingPools(pivots: Pivot[], price: number, now: number): LiquidityLevel
         kind: 'swing',
         strength: score,
         notionalUsd: null,
-        label: `${g.length > 1 ? `${g.length} equal ` : ''}${side === 'buy-side' ? 'swing high' : 'swing low'}${g.length > 1 ? 's' : ''}`,
-        detail: `${hasDaily ? 'Daily' : '4h'} pivot, untouched for ${ageDays.toFixed(0)} days`,
+        label:
+          g.length > 1
+            ? t(side === 'buy-side' ? '{n} equal swing highs' : '{n} equal swing lows', { n: g.length })
+            : t(side === 'buy-side' ? 'swing high' : 'swing low'),
+        detail: t(hasDaily ? 'Daily pivot, untouched for {n} days' : '4h pivot, untouched for {n} days', { n: ageDays.toFixed(0) }),
       });
     }
   }
@@ -203,7 +207,7 @@ const MAINT_MARGIN = 0.005;
 const LIQ_BUCKET_PCT = 0.5;
 const LIQ_RANGE_PCT = 25;
 
-function estimateLiquidations(hourly: Candle[], oi: { t: number; usd: number }[], price: number) {
+function estimateLiquidations(hourly: Candle[], oi: { t: number; usd: number }[], price: number, t: T) {
   const n = hourly.length;
   const nb = Math.round((2 * LIQ_RANGE_PCT) / LIQ_BUCKET_PCT);
   const longUsd = new Float64Array(nb);
@@ -283,8 +287,8 @@ function estimateLiquidations(hourly: Candle[], oi: { t: number; usd: number }[]
         kind: 'liquidation',
         strength: p.usd / max,
         notionalUsd: p.usd,
-        label: side === 'short' ? 'Short liquidations' : 'Long liquidations',
-        detail: 'Estimated from Binance open-interest growth and an assumed leverage mix',
+        label: side === 'short' ? t('Short liquidations') : t('Long liquidations'),
+        detail: t('Estimated from Binance open-interest growth and an assumed leverage mix'),
       });
     }
   }
@@ -364,7 +368,7 @@ const WARMUP_SEC = 45 * 86_400;
  * liquidation level on the map for each leverage tier; the level stays (fading as positions get closed)
  * until price trades through it.
  */
-export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset): Promise<LiquidationHeatmap> {
+export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset, t: T = EN): Promise<LiquidationHeatmap> {
   const spec = HEAT_WINDOWS[window];
   const first = Math.max(0, ds.n - spec.cols);
   const start = Math.max(0, first - Math.ceil(WARMUP_SEC / ds.barSec));
@@ -434,15 +438,15 @@ export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset): Pr
     maxUsd,
     candles,
     notes: [
-      'An estimate, not exchange data: new positions are inferred from traded volume, scaled by how much Binance open interest has recently grown per dollar traded, then split evenly between longs and shorts and across an assumed leverage mix of 5× to 100×.',
-      'A level disappears when price trades through it and fades with a 10-day half life as positions are closed. The 45 days before the window are replayed first, so levels opened earlier are already on the map.',
+      t('An estimate, not exchange data: new positions are inferred from traded volume, scaled by how much Binance open interest has recently grown per dollar traded, then split evenly between longs and shorts and across an assumed leverage mix of 5× to 100×.'),
+      t('A level disappears when price trades through it and fades with a 10-day half life as positions are closed. The 45 days before the window are replayed first, so levels opened earlier are already on the map.'),
     ],
   };
 }
 
 export const HEATMAP_TIMEFRAME = (window: HeatmapWindow) => HEAT_WINDOWS[window].tf;
 
-export async function liquidityReport(ds: Dataset): Promise<LiquidityReport> {
+export async function liquidityReport(ds: Dataset, t: T = EN): Promise<LiquidityReport> {
   const { books, h4, h1, oi } = await loadMarket();
   const notes: string[] = [];
   const lastClose = ds.c[ds.n - 1];
@@ -456,11 +460,11 @@ export async function liquidityReport(ds: Dataset): Promise<LiquidityReport> {
     if (bestAsk > bestBid) price = (bestBid + bestAsk) / 2;
   }
 
-  const book = analyseBooks(books, price);
-  if (books.length === 0) notes.push('No order book venue answered; depth is unavailable right now.');
-  else if (books.length < 4) notes.push(`Order book built from ${books.length} of 4 venues.`);
+  const book = analyseBooks(books, price, t);
+  if (books.length === 0) notes.push(t('No order book venue answered; depth is unavailable right now.'));
+  else if (books.length < 4) notes.push(t('Order book built from {n} of 4 venues.', { n: books.length }));
   notes.push(
-    'Beyond roughly ±1.5% the combined book is mostly Coinbase and Bitstamp (the venues that publish their full book), so far-away walls understate global depth.',
+    t('Beyond roughly ±1.5% the combined book is mostly Coinbase and Bitstamp (the venues that publish their full book), so far-away walls understate global depth.'),
   );
 
   const daily: Candle[] = [];
@@ -468,13 +472,13 @@ export async function liquidityReport(ds: Dataset): Promise<LiquidityReport> {
     daily.push({ t: ds.t[i], o: ds.o[i], h: ds.h[i], l: ds.l[i], c: ds.c[i], v: ds.v[i] });
   }
   const pivots = [...unsweptPivots(daily, 5, '1D'), ...unsweptPivots(h4, 6, '4h')];
-  const swings = swingPools(pivots, price, Math.floor(Date.now() / 1000));
+  const swings = swingPools(pivots, price, Math.floor(Date.now() / 1000), t);
 
-  const liq = estimateLiquidations(h1, oi, price);
-  if (h1.length === 0) notes.push('Hourly candles unavailable; liquidation estimate skipped.');
+  const liq = estimateLiquidations(h1, oi, price, t);
+  if (h1.length === 0) notes.push(t('Hourly candles unavailable; liquidation estimate skipped.'));
   else {
     notes.push(
-      'Liquidation clusters are a model estimate (Binance open-interest growth × assumed leverage mix), not exchange-reported positions.',
+      t('Liquidation clusters are a model estimate (Binance open-interest growth × assumed leverage mix), not exchange-reported positions.'),
     );
   }
 

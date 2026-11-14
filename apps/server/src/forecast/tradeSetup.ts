@@ -2,6 +2,7 @@ import type { TradeGridCell, TradeOutcome, TradeSetupRequest, TradeSetupResult }
 import type { Dataset } from '../analytics/dataset.js';
 import type { Prepared } from './analog.js';
 import { forecastContext, type Sample } from './forecast.js';
+import { EN, type T } from '../i18n/index.js';
 
 /** Maintenance margin assumed for the liquidation estimate (isolated margin, lowest tier). */
 const MAINT_MARGIN = 0.005;
@@ -87,15 +88,15 @@ function simulate(
 const GRID_STOPS = [1, 1.5, 2, 3, 4];
 const GRID_TAKES = [1.5, 2, 3, 4, 6, 8];
 
-export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupRequest): TradeSetupResult {
-  const ctx = forecastContext(ds, prep, req.settings);
-  const { nb, base, mix, q } = ctx;
+export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupRequest, t: T = EN): TradeSetupResult {
+  const ctx = forecastContext(ds, prep, req.settings, t);
+  const { nb, base, mix, q, qf } = ctx;
   const entry = req.entry > 0 ? req.entry : ctx.price;
   const dir = req.side === 'long' ? 1 : -1;
   const stopFrac = req.stopPct / 100;
   const takeFrac = req.takePct / 100;
 
-  const funding = Number.isNaN(ds.fundingPerDay[q]) ? 0 : ds.fundingPerDay[q] * 100;
+  const funding = Number.isNaN(ds.fundingPerDay[qf]) ? 0 : ds.fundingPerDay[qf] * 100;
   const costsFor = (side: 'long' | 'short'): SimCosts => ({
     feePct: (2 * req.feeBps) / 100,
     fundingPctPerBar: (side === 'long' ? funding : -funding) * ds.barDays,
@@ -127,23 +128,23 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
   const warnings: string[] = [];
   if (req.leverage > maxSafeLeverage) {
     warnings.push(
-      `At ${req.leverage}× the position is liquidated near ${Math.round(liquidationPrice).toLocaleString('en-US')} – before your stop at ${Math.round(stopPrice).toLocaleString('en-US')}. Use ${maxSafeLeverage}× or less for this stop distance.`,
+      t('At {lev}× the position is liquidated near {liq} – before your stop at {stop}. Use {safe}× or less for this stop distance.', { lev: req.leverage, liq: Math.round(liquidationPrice).toLocaleString('en-US'), stop: Math.round(stopPrice).toLocaleString('en-US'), safe: maxSafeLeverage }),
     );
   }
   if (marginUsd > req.accountUsd) {
     warnings.push(
-      `This size needs $${Math.round(marginUsd).toLocaleString('en-US')} of margin, more than the account. Raise leverage to at least ${Math.ceil(positionNotionalUsd / req.accountUsd)}× (if the stop allows it) or lower the risk per trade.`,
+      t('This size needs ${margin} of margin, more than the account. Raise leverage to at least {lev}× (if the stop allows it) or lower the risk per trade.', { margin: Math.round(marginUsd).toLocaleString('en-US'), lev: Math.ceil(positionNotionalUsd / req.accountUsd) }),
     );
   }
-  if (req.riskPct > 2) warnings.push('Risking more than 2% of the account per trade makes a normal losing streak very costly.');
-  if (model.evR <= 0) warnings.push('After costs, this bracket had a negative expected value in the analog sample.');
-  if (nb.effectiveN < 30) warnings.push('Small analog sample: the hit probabilities below carry wide error bars.');
+  if (req.riskPct > 2) warnings.push(t('Risking more than 2% of the account per trade makes a normal losing streak very costly.'));
+  if (model.evR <= 0) warnings.push(t('After costs, this bracket had a negative expected value in the analog sample.'));
+  if (nb.effectiveN < 15) warnings.push(t('Small analog sample: the hit probabilities below carry wide error bars.'));
   if (req.entry > 0 && Math.abs(req.entry / ctx.price - 1) > 0.01) {
-    warnings.push('Probabilities assume you are filled at the entry price now; a resting limit order may never fill.');
+    warnings.push(t('Probabilities assume you are filled at the entry price now; a resting limit order may never fill.'));
   }
-  if (req.stopPct < (ds.atr14[q] / ctx.price) * 100) {
+  if (req.stopPct < (ds.atr14[qf] / ctx.price) * 100) {
     warnings.push(
-      `The stop is tighter than the average range of a single bar (${((ds.atr14[q] / ctx.price) * 100).toFixed(1)}%): ordinary noise will often hit it.`,
+      t('The stop is tighter than the average range of a single bar ({pct}%): ordinary noise will often hit it.', { pct: ((ds.atr14[qf] / ctx.price) * 100).toFixed(1) }),
     );
   }
 
@@ -163,7 +164,7 @@ export function runTradeSetup(ds: Dataset, prep: Prepared, req: TradeSetupReques
     rewardUsd: positionNotionalUsd * takeFrac,
     costPct,
     fundingPctPerDay: req.side === 'long' ? funding : -funding,
-    atrPct: (ds.atr14[q] / ctx.price) * 100,
+    atrPct: (ds.atr14[qf] / ctx.price) * 100,
     model,
     base: baseOut,
     opposite,

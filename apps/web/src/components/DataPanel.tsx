@@ -1,12 +1,14 @@
 import type { Overview, SourceStatus } from '@smart-btc/shared';
 import { CheckCircle2, CircleAlert, Clock, RefreshCw } from 'lucide-react';
 import { fmtAgo, fmtDate } from '../lib/format';
+import { useT } from '../lib/i18n';
 import { Card, Note } from './ui';
 
 function StatusIcon({ s }: { s: SourceStatus }) {
-  if (s.status === 'ok') return <CheckCircle2 size={14} className="shrink-0 text-good" aria-label="OK" />;
-  if (s.status === 'pending') return <Clock size={14} className="shrink-0 text-mute" aria-label="Pending" />;
-  return <CircleAlert size={14} className={`shrink-0 ${s.status === 'stale' ? 'text-warn' : 'text-crit'}`} aria-label={s.status} />;
+  const { t } = useT();
+  if (s.status === 'ok') return <CheckCircle2 size={14} className="shrink-0 text-good" aria-label={t('Live')} />;
+  if (s.status === 'pending') return <Clock size={14} className="shrink-0 text-mute" aria-label={t('First sync pending')} />;
+  return <CircleAlert size={14} className={`shrink-0 ${s.status === 'stale' ? 'text-warn' : 'text-crit'}`} aria-label={t(STATUS_TEXT[s.status])} />;
 }
 
 const STATUS_TEXT: Record<SourceStatus['status'], string> = {
@@ -17,13 +19,14 @@ const STATUS_TEXT: Record<SourceStatus['status'], string> = {
 };
 
 export function DataPanel({ overview, onRefresh, refreshing }: { overview: Overview; onRefresh: () => void; refreshing: boolean }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col gap-3">
       <Card
-        title="Data sources"
+        title={t('Data sources')}
         right={
           <button onClick={onRefresh} disabled={refreshing} className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink2 hover:bg-raised disabled:opacity-50">
-            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Sync now
+            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> {t('Sync now')}
           </button>
         }
       >
@@ -37,7 +40,7 @@ export function DataPanel({ overview, onRefresh, refreshing }: { overview: Overv
                     {s.name}
                   </a>
                   <span className="num shrink-0 text-[11px] text-mute">
-                    {STATUS_TEXT[s.status]} · {fmtAgo(s.lastOk)}
+                    {t(STATUS_TEXT[s.status])} · {fmtAgo(s.lastOk)}
                   </span>
                 </div>
                 <div className="text-[11px] leading-relaxed text-mute">{s.provides}</div>
@@ -47,12 +50,12 @@ export function DataPanel({ overview, onRefresh, refreshing }: { overview: Overv
           ))}
         </ul>
         <p className="mt-2 text-[11px] leading-relaxed text-mute">
-          All sources are free and need no API key. Everything is cached in a local SQLite file (data/smart-btc.db), so the app keeps working offline with the last synced data. Price history: {fmtDate(overview.history.from)} → {fmtDate(overview.history.to)} ({overview.history.days.toLocaleString('en-US')} days).
+          {t('All sources are free and need no API key. Everything is cached in a local SQLite file (data/smart-btc.db), so the app keeps working offline with the last synced data. Price history: {from} → {to} ({n} days).', { from: fmtDate(overview.history.from), to: fmtDate(overview.history.to), n: overview.history.days.toLocaleString('en-US') })}
         </p>
       </Card>
 
       <Note>
-        Research tool for personal use, not financial advice. Probabilities are historical frequencies of similar situations, they are uncertain and can be wrong, especially around news and regime changes.
+        {t('Research tool for personal use, not financial advice. Probabilities are historical frequencies of similar situations, they are uncertain and can be wrong, especially around news and regime changes.')}
       </Note>
     </div>
   );

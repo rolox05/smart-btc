@@ -1,5 +1,4 @@
 import {
-  durationLabel,
   type BacktestRequest,
   type BacktestResult,
   type CalibrationBin,
@@ -7,7 +6,8 @@ import {
   type SignalBucket,
 } from '@smart-btc/shared';
 import type { Dataset } from '../analytics/dataset.js';
-import { buildModel, findNeighbors, makeScratch, moveUnit, scenarioThreshold, volScale, type Prepared } from './analog.js';
+import { EN, type T } from '../i18n/index.js';
+import { baseWeight, buildModel, findNeighbors, makeScratch, moveUnit, scenarioThreshold, volScale, type Prepared } from './analog.js';
 import { ForecastError } from './forecast.js';
 import { weightedQuantiles } from './stats.js';
 
@@ -29,14 +29,13 @@ const TRADE_COST = 0.001; // 10 bps round trip per position
 /** Upper bound on scored forecasts, so long intraday histories stay as fast as the daily one. */
 const MAX_EVALS = 1500;
 
-export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest): BacktestResult {
+export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest, t: T = EN): BacktestResult {
   const started = Date.now();
   const s = req.settings;
   const H = s.horizon;
-  const blend = s.baseRateBlend;
-  const dur = durationLabel(ds.tf, H);
-  const { model } = buildModel(ds, s.features, s.startYear);
-  if (model.ids.length === 0) throw new ForecastError('Select at least one usable metric as a model input.');
+  const dur = t.dur(ds.tf, H);
+  const { model } = buildModel(ds, s.features, s.startYear, t);
+  if (model.ids.length === 0) throw new ForecastError(t('Select at least one usable metric as a model input.'));
   const span = ds.n - model.start;
   const step = Math.max(1, Math.round(req.stepBars), Math.ceil((span - H) / MAX_EVALS));
   // Training history required before the first scored forecast; short series (weekly, monthly) get a lower bar.
@@ -96,6 +95,7 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest): 
     if (maxCand - model.start < minTrain) continue;
     const nb = findNeighbors(ds, model, prep, q, maxCand, s, scratch);
     if (!nb || nb.candidates < minCandidates) continue;
+    const blend = baseWeight(s, nb);
 
     const T = scenarioThreshold(ds, q, s);
     const rallyT = Math.log(1 + T / 100);
@@ -205,16 +205,16 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest): 
 
   if (evals < 20) {
     throw new ForecastError(
-      'Too little history to backtest this combination. Pick an earlier start year, a shorter horizon, or inputs with longer history.',
+      t('Too little history to backtest this combination. Pick an earlier start year, a shorter horizon, or inputs with longer history.'),
     );
   }
 
   const labels: Record<EventId, string> = {
-    up: `Higher after ${dur}`,
-    rally: 'Rally scenario (≥ +threshold)',
-    decline: 'Decline scenario (≤ −threshold)',
-    touchUp: `Touches +${touchPct}% within ${dur}`,
-    touchDown: `Touches −${touchPct}% within ${dur}`,
+    up: t('Higher after {dur}', { dur }),
+    rally: t('Rally scenario (≥ +threshold)'),
+    decline: t('Decline scenario (≤ −threshold)'),
+    touchUp: t('Touches +{pct}% within {dur}', { pct: touchPct, dur }),
+    touchDown: t('Touches −{pct}% within {dur}', { pct: touchPct, dur }),
   };
   const scores: EventScore[] = EVENTS.map((e) => {
     const brier = sums[e].brier / evals;
@@ -253,16 +253,16 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest): 
     avgSkill > 0.03
       ? {
           label: 'measurable edge',
-          text: `Across ${evals.toLocaleString('en-US')} out-of-sample forecasts these inputs beat the base rate by ${(avgSkill * 100).toFixed(1)}% (Brier skill, averaged over five events). That is a real but modest edge; it comes from roughly ${independent} non-overlapping windows, so expect it to wobble.`,
+          text: t('Across {n} out-of-sample forecasts these inputs beat the base rate by {skill}% (Brier skill, averaged over five events). That is a real but modest edge; it comes from roughly {windows} non-overlapping windows, so expect it to wobble.', { n: evals.toLocaleString('en-US'), skill: (avgSkill * 100).toFixed(1), windows: independent }),
         }
       : avgSkill > 0.005
         ? {
             label: 'weak edge',
-            text: `These inputs were only marginally better than the base rate (+${(avgSkill * 100).toFixed(1)}% Brier skill). Treat the forecast as "BTC's usual behaviour, slightly tilted" rather than as a signal.`,
+            text: t('These inputs were only marginally better than the base rate (+{skill}% Brier skill). Treat the forecast as "BTC\'s usual behaviour, slightly tilted" rather than as a signal.', { skill: (avgSkill * 100).toFixed(1) }),
           }
         : {
             label: 'no edge',
-            text: `Out of sample, these inputs did not reliably beat the plain base rate (${(avgSkill * 100).toFixed(1)}% Brier skill, inside the noise). The probabilities shown for this configuration are not more reliable than "what BTC usually does over ${dur}". Try other inputs, a different horizon, or more analogs.`,
+            text: t('Out of sample, these inputs did not reliably beat the plain base rate ({skill}% Brier skill, inside the noise). The probabilities shown for this configuration are not more reliable than "what BTC usually does over {dur}". Try other inputs, a different horizon, or more analogs.', { skill: (avgSkill * 100).toFixed(1), dur }),
           };
 
   // Keep the timeline payload small.
@@ -286,7 +286,7 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest): 
     medianError: { model: absErrModel / evals, base: absErrNaive / evals },
     equity,
     strategy: {
-      rule: `Every ${dur}: long if P(up) ≥ ${Math.round(LONG_ABOVE * 100)}%, short if ≤ ${Math.round(SHORT_BELOW * 100)}%, otherwise flat. 1× leverage, 0.10% cost per trade.`,
+      rule: t('Every {dur}: long if P(up) ≥ {long}%, short if ≤ {short}%, otherwise flat. 1× leverage, 0.10% cost per trade.', { dur, long: Math.round(LONG_ABOVE * 100), short: Math.round(SHORT_BELOW * 100) }),
       trades,
       totalReturnPct: (eq - 1) * 100,
       buyHoldReturnPct: (bh - 1) * 100,

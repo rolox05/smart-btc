@@ -1,10 +1,11 @@
-import { durationLabel, type BacktestRequest, type BacktestSummary, type ForecastSettings, type MetricDef } from '@smart-btc/shared';
+import { type BacktestRequest, type BacktestSummary, type ForecastSettings, type MetricDef } from '@smart-btc/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { BrainCircuit, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { fmtPct } from '../lib/format';
+import { useT } from '../lib/i18n';
 import { SERIES } from '../lib/palette';
 import { Card, DivergingBar, Note, Td, Th } from './ui';
 
@@ -32,6 +33,7 @@ const RANK_STEP_MIN = 5;
 const SkillBar = ({ value }: { value: number }) => <DivergingBar value={value} scale={0.08} positive={SERIES[0]} negative={SERIES[7]} />;
 
 export function RankingPanel({ metrics, model, settings, params, dataVersion, armedKey, onArm, onToggleModel }: Props) {
+  const { t, dur } = useT();
   const qc = useQueryClient();
   const [, setTick] = useState(0);
   const candidates = useMemo(() => metrics.filter((m) => m.forecastable), [metrics]);
@@ -129,19 +131,19 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
   return (
     <div className="flex flex-col gap-3">
       <Card
-        title="Which inputs carry information?"
+        title={t('Which inputs carry information?')}
         right={
           <button
             onClick={() => onArm(configKey)}
             disabled={running || (armed && done === total)}
             className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-ink2 hover:bg-raised disabled:opacity-50"
           >
-            <Play size={12} /> {running ? `Running ${done}/${total}` : armed ? 'Up to date' : 'Run ranking'}
+            <Play size={12} /> {running ? t('Running {done}/{total}', { done, total }) : armed ? t('Up to date') : t('Run ranking')}
           </button>
         }
       >
         <p className="text-xs leading-relaxed text-ink2">
-          Backtests every metric on its own, then checks what each one adds to (or takes from) your current set of inputs, for the {durationLabel(settings.timeframe, settings.horizon)} horizon on {settings.timeframe} bars and the model settings above. Skill is the Brier skill against the base rate, averaged over the five scored events; 0% means no better than BTC's long-run frequencies.
+          {t("Backtests every metric on its own, then checks what each one adds to (or takes from) your current set of inputs, for the {dur} horizon on {tf} bars and the model settings above. Skill is the Brier skill against the base rate, averaged over the five scored events; 0% means no better than BTC's long-run frequencies.", { dur: dur(settings.timeframe, settings.horizon), tf: settings.timeframe })}
         </p>
         {started && (
           <div className="mt-2.5">
@@ -150,29 +152,29 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
             </div>
             <div className="num mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
               <span>
-                {done} of {total} backtests{running ? ' · about a second each' : ''} · evaluated every {stepBars}+ bars
+                {t('{done} of {total} backtests', { done, total })}{running ? ` · ${t('about a second each')}` : ''} · {t('evaluated every {n}+ bars', { n: stepBars })}
               </span>
               {plan.baseline && (
                 <span>
-                  Your set ({model.length} input{model.length === 1 ? '' : 's'}):{' '}
-                  <span className="text-ink">{baseline.data ? fmtPct(baseline.data.avgSkill * 100) : baseline.error ? 'not enough history' : '…'}</span>
+                  {t(model.length === 1 ? 'Your set (1 input):' : 'Your set ({n} inputs):', { n: model.length })}{' '}
+                  <span className="text-ink">{baseline.data ? fmtPct(baseline.data.avgSkill * 100) : baseline.error ? t('not enough history') : '…'}</span>
                 </span>
               )}
             </div>
           </div>
         )}
-        {!started && <p className="mt-2 text-[11px] text-mute">Takes roughly {Math.round(total * 0.8)} seconds. Results are kept while the settings stay the same.</p>}
+        {!started && <p className="mt-2 text-[11px] text-mute">{t('Takes roughly {n} seconds. Results are kept while the settings stay the same.', { n: Math.round(total * 0.8) })}</p>}
       </Card>
 
       {started && (
-        <Card title="Ranking">
+        <Card title={t('Ranking')}>
           <table className="w-full">
             <thead>
               <tr>
-                <Th>Input</Th>
-                <Th right title="Skill of a model that uses only this input">Alone</Th>
-                <Th right title="For inputs in your set: how much skill is lost without it. For the others: how much skill changes when it is added.">In your set</Th>
-                <Th right>Use</Th>
+                <Th>{t('Input')}</Th>
+                <Th right title={t('Skill of a model that uses only this input')}>{t('Alone')}</Th>
+                <Th right title={t('For inputs in your set: how much skill is lost without it. For the others: how much skill changes when it is added.')}>{t('In your set')}</Th>
+                <Th right>{t('Use')}</Th>
               </tr>
             </thead>
             <tbody>
@@ -186,7 +188,7 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
                         <div className="min-w-0">
                           <div className="truncate text-ink">{r.metric.name}</div>
                           <div className="text-[10.5px] text-mute">
-                            {r.soloError ? r.soloError.message : since ? `scored from ${since} · ${r.soloData!.evaluations.toLocaleString('en-US')} forecasts` : 'waiting…'}
+                            {r.soloError ? r.soloError.message : since ? t('scored from {year} · {n} forecasts', { year: since, n: r.soloData!.evaluations.toLocaleString('en-US') }) : t('waiting…')}
                           </div>
                         </div>
                       </div>
@@ -207,13 +209,13 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
                           className="text-ink2"
                           title={
                             r.inModel
-                              ? 'Skill your set loses if this input is removed'
+                              ? t('Skill your set loses if this input is removed')
                               : r.shorter
-                                ? 'Change in skill if added. This input has a shorter history, so the two backtests cover different periods and are not directly comparable.'
-                                : 'Change in skill if this input is added to your set'
+                                ? t('Change in skill if added. This input has a shorter history, so the two backtests cover different periods and are not directly comparable.')
+                                : t('Change in skill if this input is added to your set')
                           }
                         >
-                          {r.inModel ? 'in set: ' : 'if added: '}
+                          {r.inModel ? t('in set:') : t('if added:')}{' '}
                           <span className="text-ink">{fmtPct(r.effect * 100)}</span>
                           {r.shorter && <span className="text-warn"> *</span>}
                         </span>
@@ -225,8 +227,8 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
                       <button
                         onClick={() => onToggleModel(r.metric.id)}
                         aria-pressed={r.inModel}
-                        aria-label={`${r.inModel ? 'Remove' : 'Use'} ${r.metric.name} as a forecast input`}
-                        title={r.inModel ? 'In your set: click to remove' : 'Click to add to your set'}
+                        aria-label={t(r.inModel ? 'Remove {name} as a forecast input' : 'Use {name} as a forecast input', { name: r.metric.name })}
+                        title={r.inModel ? t('In your set: click to remove') : t('Click to add to your set')}
                         className={clsx('rounded p-1', r.inModel ? 'bg-accent/20 text-[#7fb2f0]' : 'text-mute hover:text-ink2')}
                       >
                         <BrainCircuit size={14} />
@@ -238,13 +240,13 @@ export function RankingPanel({ metrics, model, settings, params, dataVersion, ar
             </tbody>
           </table>
           <p className="mt-2 text-[11px] leading-relaxed text-mute">
-            Sorted by skill alone. <span className="text-warn">*</span> marks inputs with a shorter history than your set: adding them changes the period being scored, so that figure is indicative only. Changing your set re-runs only the "in your set" column.
+            {t('Sorted by skill alone. * marks inputs with a shorter history than your set: adding them changes the period being scored, so that figure is indicative only. Changing your set re-runs only the "in your set" column.')}
           </p>
         </Card>
       )}
 
       <Note>
-        Ranking many inputs and keeping the winners is itself a form of over-fitting: with this many candidates, one or two will look good by luck. Prefer inputs that hold up across several horizons and that you have a reason to believe in, and treat differences of a percent or less as noise.
+        {t('Ranking many inputs and keeping the winners is itself a form of over-fitting: with this many candidates, one or two will look good by luck. Prefer inputs that hold up across several horizons and that you have a reason to believe in, and treat differences of a percent or less as noise.')}
       </Note>
     </div>
   );

@@ -1,0 +1,817 @@
+/**
+ * Metric names, descriptions and reading guides in other languages, keyed by metric id.
+ * A missing field falls back to the English text in analytics/metrics.ts and analytics/guide.ts.
+ */
+export interface MetricText {
+  name?: string;
+  short?: string;
+  description?: string;
+  read?: string[];
+  caveat?: string;
+}
+
+const es: Record<string, MetricText> = {
+  sma200: {
+    name: 'Media móvil de 200 días',
+    short: 'SMA 200',
+    description: 'Línea de tendencia de largo plazo. El precio por encima de ella es el régimen alcista clásico.',
+    read: [
+      'Precio sobre una media de 200 días ascendente: tendencia alcista de largo plazo. Los retrocesos hasta la línea a menudo han encontrado compradores.',
+      'Precio bajo una línea descendente: tendencia bajista de largo plazo. Los rebotes hasta la línea a menudo se han vendido.',
+      'Un cruce de la línea marca un cambio de régimen más que una señal de entrada.',
+    ],
+    caveat: 'Es lenta por diseño: confirma una tendencia meses después de que empezó y da señales falsas en mercados laterales.',
+  },
+  sma50: {
+    name: 'Media móvil de 50 días',
+    short: 'SMA 50',
+    description: 'Línea de tendencia de medio plazo.',
+    read: [
+      'Sigue la tendencia de medio plazo. Por encima, el impulso favorece a los compradores; por debajo, a los vendedores.',
+      'El cruce de la media de 50 días por encima de la de 200 ("cruce dorado") o por debajo ("cruce de la muerte") es una señal muy vigilada y retrasada.',
+    ],
+    caveat: 'Los cruces son frecuentes en mercados agitados y a menudo llegan cuando ya pasó gran parte del movimiento.',
+  },
+  supertrend: {
+    name: 'Supertrend (10, 3)',
+    short: 'Supertrend',
+    description: 'Una línea que sigue al precio a tres rangos verdaderos medios de distancia. Por debajo del precio (verde) la tendencia es alcista; por encima (roja), bajista. Un cierre que la atraviesa la invierte.',
+    read: [
+      'Verde y por debajo del precio: tendencia alcista. La línea solo sube, así que sirve como stop dinámico para largos.',
+      'Roja y por encima del precio: tendencia bajista. La línea solo baja, un stop dinámico para cortos.',
+      'La señal es el cambio de lado (un cierre que atraviesa la línea); la distancia hasta la línea es el margen que tiene la tendencia antes de invertirse.',
+    ],
+    caveat: 'Siempre muestra una tendencia, así que en mercados laterales cambia de lado una y otra vez y cada cambio cuesta algo. Además reacciona tarde por diseño.',
+  },
+  bbUpper: {
+    name: 'Bandas de Bollinger (20, 2σ)',
+    short: 'Bollinger',
+    description: 'Dos desviaciones estándar alrededor de la media de 20 días. Las bandas estrechas preceden a una expansión.',
+    read: [
+      'Las bandas se ensanchan cuando sube la volatilidad y se estrechan cuando baja. Las bandas muy estrechas ("squeeze") suelen preceder a un movimiento grande, sin dirección definida.',
+      'Un cierre fuera de una banda muestra fuerza o debilidad inusual; en tendencia, el precio puede "montar" una banda durante semanas.',
+    ],
+    caveat: 'Tocar una banda no es por sí solo una señal de giro.',
+  },
+  sthRealizedPrice: {
+    name: 'Precio realizado de tenedores a corto plazo',
+    short: 'Coste STH',
+    description: 'Coste medio on-chain de las monedas movidas en los últimos 155 días. Actúa como soporte en tendencias alcistas y como resistencia en bajistas. La fuente gratuita cubre los últimos 4 años.',
+    read: [
+      'El precio medio pagado por las monedas que se movieron en los últimos ~5 meses: el punto de equilibrio de los compradores recientes.',
+      'En tendencias alcistas el precio suele mantenerse por encima (los compradores recientes defienden su entrada). En bajistas se convierte en resistencia (venden al recuperar su precio).',
+    ],
+    caveat: 'La fuente gratuita llega con 7 días de retraso y cubre 4 años, así que úsalo como zona, no como nivel exacto.',
+  },
+  realizedPrice: {
+    name: 'Precio realizado',
+    short: 'Precio realizado',
+    description: 'Coste medio on-chain de todas las monedas (capitalización ÷ MVRV ÷ oferta). Suelo histórico de los mercados bajistas.',
+    read: [
+      'El precio medio al que se movió por última vez cada moneda: el coste de todo el mercado.',
+      'El precio solo ha pasado breves periodos por debajo, en lo más profundo de los mercados bajistas (2015, 2018–19, 2022).',
+    ],
+    caveat: 'Se mueve muy despacio y no dice nada sobre las próximas semanas.',
+  },
+  rsi14: {
+    name: 'RSI (14)',
+    short: 'RSI',
+    description: 'Índice de fuerza relativa sobre cierres diarios. Por encima de 70 hay sobrecompra; por debajo de 30, sobreventa.',
+    read: [
+      'Por encima de 70: sobrecompra. Impulso fuerte, pero estirado. Por debajo de 30: sobreventa. Ventas fuertes, pero estiradas.',
+      'Alrededor de 50 es neutral; mantenerse por encima de 50 en los retrocesos es típico de las tendencias alcistas.',
+      'Las divergencias (precio y RSI en desacuerdo en máximos o mínimos sucesivos) indican que un movimiento pierde fuerza. Actívalas bajo RSI en la lista de métricas.',
+    ],
+    caveat: 'En tendencias fuertes el RSI puede seguir en sobrecompra o sobreventa durante semanas. Los extremos dicen "estirado", no "a punto de girar".',
+  },
+  mom30: {
+    name: 'Rentabilidad a 30 días',
+    short: 'Mom 30d',
+    description: 'Variación del precio en los últimos 30 días.',
+    read: [
+      'Simplemente cuánto cambió el precio en 30 días. Valores muy positivos indican una subida fuerte reciente; muy negativos, una caída brusca.',
+      'Bitcoin ha mostrado tanto impulso (meses fuertes seguidos de más fuerza) como reversión a la media tras movimientos extremos.',
+    ],
+    caveat: 'Aporta casi la misma información que el RSI; usar ambos como entradas del modelo añade poco.',
+  },
+  mayer: {
+    name: 'Múltiplo de Mayer',
+    short: 'Mayer',
+    description: 'Precio ÷ media de 200 días. Por encima de 2,4 ha marcado mercados sobrecalentados; por debajo de 0,8, valor profundo.',
+    read: [
+      'Por encima de 2,4: el precio está muy por encima de su tendencia de largo plazo, históricamente una zona de sobrecalentamiento.',
+      'Alrededor de 1: el precio está en la media de 200 días. Por debajo de 0,8: descuento profundo, visto cerca de los mínimos bajistas.',
+    ],
+    caveat: 'Los máximos han sido más bajos en cada ciclo, así que los umbrales fijos de ciclos antiguos quizá no vuelvan a alcanzarse.',
+  },
+  vol30: {
+    name: 'Volatilidad realizada (30d)',
+    short: 'Vol 30d',
+    description: 'Desviación estándar anualizada de los rendimientos diarios en 30 días.',
+    read: [
+      'Cuánto se ha movido el precio, anualizado. Valores bajos indican un mercado tranquilo; altos, uno turbulento.',
+      'La volatilidad se agrupa: la calma sigue a la calma y las tormentas a las tormentas, hasta un cambio de régimen. Lecturas inusualmente bajas a menudo han precedido grandes movimientos en cualquier dirección.',
+    ],
+    caveat: 'Mide el tamaño de los movimientos, no su dirección.',
+  },
+  dvol: {
+    name: 'Volatilidad implícita (DVOL)',
+    short: 'DVOL',
+    description: 'Índice de volatilidad implícita a 30 días de Deribit: lo que descuenta el mercado de opciones.',
+    read: [
+      'La volatilidad que esperan los operadores de opciones para los próximos 30 días. Divide entre ~19 para obtener el movimiento diario típico implícito en %.',
+      'Por encima de la volatilidad realizada: el mercado paga por protegerse (nervioso). Por debajo: complacencia.',
+    ],
+    caveat: 'El historial empieza en 2021 y, como la volatilidad realizada, no indica dirección.',
+  },
+  ddDays10: {
+    name: 'Días sin una caída del 10%',
+    short: 'Sin −10% desde',
+    description: 'Días desde la última vez que el precio cayó un 10% desde el máximo del tramo actual.',
+    read: [
+      'Cuenta los días desde la última caída del 10% desde el máximo del tramo actual. Cuentas largas indican una subida inusualmente suave.',
+      'Bitcoin rara vez pasa más de unos meses sin una caída del 10%, así que una cuenta alta dice que una corrección es estadísticamente "debida", sin decir cuándo.',
+    ],
+    caveat: 'El contador se reinicia con la propia caída; una cuenta baja puede significar "acaba de corregir" o "está en plena caída".',
+  },
+  ddDays15: {
+    name: 'Días sin una caída del 15%',
+    short: 'Sin −15% desde',
+    description: 'Días desde la última vez que el precio cayó un 15% desde el máximo del tramo actual.',
+    read: ['La misma idea con un umbral del 15%: el tiempo desde la última corrección mediana.'],
+    caveat: 'Muy relacionado con los contadores del 10% y del 20%; normalmente uno de los tres lleva la información.',
+  },
+  ddDays20: {
+    name: 'Días sin una caída del 20%',
+    short: 'Sin −20% desde',
+    description: 'Días desde la última vez que el precio cayó un 20% desde el máximo del tramo actual.',
+    read: [
+      'Días desde la última corrección del 20%. Los tramos largos son típicos de fases alcistas maduras y de rangos tranquilos y de baja volatilidad.',
+      'Comparado con el contador del 10%, indica si la debilidad reciente es un retroceso leve (10% reiniciado, 20% sigue contando) o una corrección real.',
+    ],
+  },
+  ddDays25: {
+    name: 'Días sin una caída del 25%',
+    short: 'Sin −25% desde',
+    description: 'Días desde la última vez que el precio cayó un 25% desde el máximo del tramo actual.',
+    read: ['Días desde la última corrección del 25%. Caídas de este tamaño son más raras y suelen marcar el final de un tramo más que un retroceso dentro de él.'],
+    caveat: 'Muy relacionado con los contadores del 20% y del 30%.',
+  },
+  ddDays30: {
+    name: 'Días sin una caída del 30%',
+    short: 'Sin −30% desde',
+    description: 'Días desde la última vez que el precio cayó un 30% desde el máximo del tramo actual.',
+    read: [
+      'Días desde la última corrección del 30%. En mercados alcistas pasados, las caídas del 30% eran la corrección "profunda" típica; cuentas largas indican que la subida ha durado inusualmente sin una.',
+    ],
+    caveat: 'Son eventos poco frecuentes, así que el contador dice poco sobre las próximas semanas.',
+  },
+  ddDays35: {
+    name: 'Días sin una caída del 35%',
+    short: 'Sin −35% desde',
+    description: 'Días desde la última vez que el precio cayó un 35% desde el máximo del tramo actual.',
+    read: ['Días desde la última corrección del 35%: mide cuánto tiempo ha pasado desde una gran venta masiva o el último tramo bajista.'],
+    caveat: 'Solo existen unas pocas decenas de eventos así en todo el historial.',
+  },
+  ddAth: {
+    name: 'Caída desde el máximo histórico',
+    short: 'Desde ATH',
+    description: 'Cuánto está el precio por debajo de su máximo histórico.',
+    read: [
+      'Cuánto está el precio por debajo de su máximo histórico. Cerca del 0%: descubrimiento de precio. Del −20% al −40%: corrección normal de mercado alcista o inicio bajista.',
+      'Más allá del −50%: mercado bajista. Los ciclos anteriores tocaron fondo entre el −75% y el −85%.',
+    ],
+    caveat: 'Describe en qué punto del ciclo estamos, no lo que pasará después.',
+  },
+  sthMvrv: {
+    name: 'STH-MVRV',
+    short: 'STH-MVRV',
+    description: 'Precio ÷ coste de los tenedores a corto plazo: la ganancia o pérdida no realizada de los compradores recientes. Por debajo de 1 están en pérdidas. Fuente gratuita: solo los últimos 4 años, así que usarlo como entrada del modelo acorta el historial de análogos.',
+    read: [
+      'El precio dividido entre el coste de los compradores recientes. Por encima de 1 están en ganancias; por debajo de 1, en pérdidas.',
+      'Alrededor de 1 es un punto de decisión: soporte en tendencias alcistas, resistencia en bajistas. Por encima de ~1,3 los compradores recientes acumulan grandes ganancias y suele haber toma de beneficios.',
+      'Bien por debajo de 1 (0,8–0,9) marca la capitulación de los compradores recientes, habitual cerca de mínimos locales.',
+    ],
+    caveat: 'Los datos gratuitos llegan con 7 días de retraso y se limitan a 4 años.',
+  },
+  sthBehavior: {
+    name: 'Análisis de comportamiento de tenedores a corto plazo',
+    short: 'Comportamiento STH',
+    description: 'STH-MVRV medido frente a su propia media de 90 días, con bandas una desviación estándar por encima y por debajo de su nivel habitual. Muestra cuándo los compradores recientes están inusualmente en ganancias o en pérdidas respecto a los últimos tres meses.',
+    read: [
+      'Por encima de la banda superior (+1σ): los compradores recientes están inusualmente en ganancias frente a los últimos 90 días. Estos tramos sobrecalentados han tendido a llegar antes de máximos locales o pausas, a medida que crece la toma de beneficios.',
+      'Por debajo de la banda inferior (−1σ): los compradores recientes están inusualmente en pérdidas. Estos tramos de capitulación han tendido a llegar cerca de mínimos locales, cuando los tenedores más débiles ya han vendido.',
+      'Volver a cruzar el cero marca el paso entre que los compradores recientes ganen o pierdan terreno respecto a su norma de tres meses.',
+    ],
+    caveat: 'En una tendencia sostenida puede quedarse fuera de una banda durante semanas. La fuente gratuita llega con 7 días de retraso y cubre 4 años, así que las bandas empiezan en 2023; la línea sigue la idea de un gráfico publicado de Glassnode, no su fórmula exacta.',
+  },
+  sthSopr: {
+    name: 'STH-SOPR (media 7d)',
+    short: 'STH-SOPR',
+    description: 'Ratio de beneficio/pérdida realizado de las monedas gastadas por tenedores a corto plazo. Por debajo de 1 venden con pérdidas (capitulación); bien por encima de 1 toman beneficios. Fuente gratuita: solo los últimos 4 años, así que usarlo como entrada del modelo acorta el historial de análogos.',
+    read: [
+      'Si las monedas vendidas por compradores recientes se vendieron con beneficio (por encima de 1) o con pérdida (por debajo de 1), promediado en 7 días.',
+      'En tendencias alcistas las caídas hasta 1 suelen comprarse (los tenedores se niegan a vender con pérdidas). En bajistas, los rebotes hasta 1 suelen venderse.',
+      'Lecturas sostenidas por debajo de 1 son capitulación; picos muy por encima de 1 son toma de beneficios agresiva.',
+    ],
+    caveat: 'Llega con 7 días de retraso en la fuente gratuita, así que describe la semana pasada.',
+  },
+  mvrv: {
+    name: 'MVRV',
+    short: 'MVRV',
+    description: 'Valor de mercado ÷ valor realizado de todas las monedas. Por encima de ~3,5 ha marcado máximos de ciclo; por debajo de 1, mínimos de ciclo.',
+    read: [
+      'El valor de mercado dividido entre el coste agregado de todas las monedas: el múltiplo de ganancia no realizada del tenedor medio.',
+      'Por encima de ~3,5: zona histórica de máximo de ciclo. Por debajo de 1: el tenedor medio está en pérdidas, zona histórica de mínimo de ciclo.',
+    ],
+    caveat: 'Un indicador lento, a escala de ciclo. Los máximos han ido bajando ciclo tras ciclo.',
+  },
+  exchNetflow: {
+    name: 'Flujo neto a exchanges (7d, % de cap.)',
+    short: 'Flujo exchanges',
+    description: 'Monedas enviadas a exchanges menos monedas retiradas en 7 días, en relación con la capitalización. Positivo = oferta moviéndose hacia los exchanges.',
+    read: ['Monedas que entran en exchanges menos las que salen, en 7 días. Las entradas son oferta potencial de venta; las salidas sugieren monedas que van a custodia.'],
+    caveat: 'El etiquetado de carteras de exchanges es imperfecto, y los flujos de ETF y custodios enturbian la imagen.',
+  },
+  funding: {
+    name: 'Funding de perpetuos (media 7d, anualizado)',
+    short: 'Funding',
+    description: 'Lo que los largos pagan a los cortos en los perpetuos de Binance. Funding positivo alto = largos saturados; negativo = cortos saturados.',
+    read: [
+      'La comisión que los largos pagan a los cortos en futuros perpetuos. Positiva y alta: los largos están saturados y pagan por mantenerse, terreno para liquidaciones de largos.',
+      'Negativa: los cortos están saturados, terreno para un short squeeze. Alrededor del 10% anualizado es la referencia neutral.',
+    ],
+    caveat: 'Los extremos pueden mantenerse durante una tendencia; es un indicador de posicionamiento más que de timing.',
+  },
+  fng: {
+    name: 'Índice de miedo y codicia',
+    short: 'Miedo y codicia',
+    description: 'Índice compuesto de sentimiento, de 0 (miedo extremo) a 100 (codicia extrema).',
+    read: [
+      'Una mezcla de 0 a 100 de volatilidad, impulso, redes sociales y dominancia. Por debajo de 25: miedo extremo. Por encima de 75: codicia extrema.',
+      'Lectura contraria clásica: miedo cerca de los mínimos, codicia cerca de los máximos.',
+    ],
+    caveat: 'Se construye en gran parte a partir del propio precio, así que sobre todo repite el comportamiento reciente.',
+  },
+  stableGrowth: {
+    name: 'Crecimiento de la oferta de stablecoins (30d)',
+    short: 'Stablecoins Δ30d',
+    description: 'Variación de la oferta total de stablecoins en USD en 30 días: nuevo poder de compra entrando en cripto.',
+    read: ['A qué ritmo crece la oferta total de stablecoins en dólares. El crecimiento indica nuevo poder de compra llegando a cripto; la contracción, dinero que sale.'],
+    caveat: 'Las stablecoins también se usan fuera del trading (pagos, DeFi), y la oferta reacciona al precio con retraso.',
+  },
+  cycleDay: {
+    name: 'Días desde el halving',
+    short: 'Desde halving',
+    description: 'Posición en el ciclo de cuatro años del halving. Es la entrada con mejor backtest, pero se basa en solo tres ciclos completos: tómala como una hipótesis previa, no como una ley.',
+    read: [
+      'Días desde el último halving de la recompensa por bloque (aproximadamente cada cuatro años). Los ciclos anteriores marcaron máximos unos 12–18 meses después de un halving y mínimos alrededor de un año más tarde.',
+    ],
+    caveat: 'Tres ciclos completos es una muestra minúscula, y el efecto sobre la oferta de cada halving es menor que el anterior.',
+  },
+  puell: {
+    name: 'Múltiplo de Puell',
+    short: 'Puell',
+    description: 'Valor diario de las monedas recién minadas ÷ su media de 365 días: cuánto ganan los mineros. Por encima de ~4 ha marcado máximos de ciclo; por debajo de ~0,5, capitulación minera cerca de los mínimos.',
+    read: [
+      'Los mineros venden parte de lo que minan para cubrir costes, así que sus ingresos marcan una presión vendedora constante. Por encima de ~4 ganan mucho más de lo habitual y las ventas tienden a subir; ahí estuvieron los máximos de ciclos anteriores.',
+      'Por debajo de ~0,5 los mineros ganan mucho menos de lo habitual y los más débiles apagan sus máquinas: históricamente, una zona de capitulación cerca de los mínimos de ciclo.',
+    ],
+    caveat: 'Cada halving reduce la emisión a la mitad, así que las lecturas cambian bruscamente en torno a los halvings, y las comisiones pesan cada vez más.',
+  },
+  exSupply: {
+    name: 'Oferta en exchanges (% de la oferta)',
+    short: 'Oferta exchanges',
+    description: 'Parte de todos los bitcoins guardada en carteras conocidas de exchanges. Una parte decreciente indica monedas que pasan a custodia propia; una creciente, monedas disponibles para vender.',
+    read: [
+      'Parte de todas las monedas en carteras conocidas de exchanges. Un descenso sostenido indica que los tenedores las retiran a custodia propia, lo que reduce la oferta lista para vender.',
+      'Una parte creciente indica monedas que entran en los exchanges, a menudo antes de vender.',
+    ],
+    caveat: 'El etiquetado de carteras de exchanges es imperfecto, y los ETF y custodios guardan monedas fuera de los exchanges, así que la tendencia de largo plazo es más clara que las oscilaciones cortas.',
+  },
+  txCount: {
+    name: 'Transacciones por día (media 30d)',
+    short: 'Transacciones',
+    description: 'Transacciones on-chain por día, promediadas en 30 días: una medida aproximada del uso de la red.',
+    read: ['Número medio de transacciones on-chain por día en 30 días. Un uso creciente junto a un precio creciente es una subida más sana que la del precio solo.'],
+    caveat: 'La agrupación de transacciones, las redes de capa 2 y las olas de inscripciones cambian el recuento sin decir mucho sobre la demanda de bitcoin.',
+  },
+  fees: {
+    name: 'Comisiones (media 7d, USD/día)',
+    short: 'Comisiones',
+    description: 'Comisiones pagadas a los mineros por día en USD, promediadas en 7 días. Los picos marcan bloques saturados, normalmente en fases especulativas.',
+    read: ['Total de comisiones pagadas a los mineros por día en USD. Los picos marcan bloques saturados, normalmente en fases especulativas o de tensión.'],
+    caveat: 'Una sola ola de inscripciones o una semana congestionada puede dominar la serie.',
+  },
+  premium: {
+    name: 'Prima de los perpetuos sobre spot (media 7d)',
+    short: 'Prima perps',
+    description: 'Cuánto cotizan los futuros perpetuos de Binance por encima (o por debajo) del spot, en media de 7 días. Una prima amplia significa que los operadores pagan por apalancarse en largo.',
+    read: [
+      'Positiva: los perpetuos cotizan sobre el spot porque los operadores pagan por largos apalancados. Una prima amplia y persistente es señal de saturación.',
+      'Negativa: los perpetuos cotizan bajo el spot, algo habitual tras limpiezas de apalancamiento y en mercados con miedo.',
+    ],
+    caveat: 'Solo Binance y solo desde finales de 2019, así que como entrada del modelo acorta el historial de análogos.',
+  },
+  hlFunding: {
+    name: 'Funding de Hyperliquid (media 7d, anualizado)',
+    short: 'Funding HL',
+    description: 'Lo que los largos pagan a los cortos en Hyperliquid, el mayor exchange de perpetuos on-chain. Una segunda visión de la saturación, con operadores distintos a los de Binance.',
+    read: ['La misma idea que el funding de Binance, medida en Hyperliquid. Cuando ambos están altos a la vez, la saturación es generalizada y no limitada a un exchange.'],
+    caveat: 'El historial empieza a mediados de 2023, así que se muestra en el gráfico pero no se ofrece como entrada del modelo.',
+  },
+  oi: {
+    name: 'Interés abierto (Bybit, USD)',
+    short: 'Interés abierto',
+    description: 'Valor nocional de los contratos perpetuos BTCUSDT abiertos en Bybit, diario desde 2020.',
+    caveat: 'Solo Bybit (un gran exchange entre varios), diario desde 2020.',
+  },
+  oiChange30: {
+    name: 'Variación del interés abierto (30d)',
+    short: 'IA Δ30d',
+    description: 'Variación del interés abierto de Bybit (en BTC) en 30 días. Un crecimiento rápido indica que entra apalancamiento; una caída brusca, que se limpiaron posiciones.',
+    read: [
+      'Por encima de ~+20%: el interés abierto ha crecido rápido, entra apalancamiento nuevo. Las subidas apoyadas en apalancamiento son propensas a cascadas de liquidaciones.',
+      'Por debajo de ~−20%: se cerraron o liquidaron posiciones; el apalancamiento se ha limpiado, lo que a menudo deja paso a una tendencia más tranquila.',
+    ],
+    caveat: 'Solo Bybit y medido en BTC, historial desde 2020. Como entrada del modelo acorta el historial de análogos a ese periodo.',
+  },
+  lsRatio: {
+    name: 'Ratio de cuentas largo/corto',
+    short: 'Ratio L/S',
+    description: 'Cuentas netas largas ÷ cuentas netas cortas en los perpetuos de Bybit, diario desde 2020. Indicador del posicionamiento minorista.',
+    caveat: 'El ratio está por encima de 1 la mayor parte del tiempo, así que compáralo con su propio historial y no con 1.',
+  },
+  putCall: {
+    name: 'Ratio put/call de opciones (interés abierto)',
+    short: 'Put/call',
+    description: 'Interés abierto en opciones put de BTC ÷ opciones call en Deribit. Más alto significa más cobertura contra una caída. Sin historial gratuito: se acumula localmente desde el día en que la app se ejecutó por primera vez.',
+    read: [
+      'Por encima de 1: hay más puts abiertas que calls, los operadores se cubren contra una caída. Lecturas muy altas suelen llegar cerca de mínimos locales, cuando el miedo ya está descontado.',
+      'Por debajo de ~0,6: posicionamiento optimista, cargado de calls.',
+    ],
+    caveat: 'No hay historial gratuito: la línea se construye localmente desde el día en que ejecutaste la app por primera vez, un valor por día.',
+  },
+  cotLevNet: {
+    name: 'Posición neta de fondos apalancados en CME (% del IA)',
+    short: 'Fondos apal. CME',
+    description: 'Hedge funds y otros operadores apalancados en los futuros de Bitcoin de CME: largos menos cortos, como parte del interés abierto. Semanal, del informe Commitments of Traders de la CFTC.',
+    read: [
+      'Los hedge funds en CME suelen estar netos en corto porque hacen operaciones de base (largo en spot o ETF, corto en futuros), así que una lectura negativa es normal.',
+      'Importan más los alejamientos de su nivel habitual que el signo: una posición corta que se deshace rápido puede añadir presión compradora.',
+    ],
+    caveat: 'Datos semanales, publicados tres días después de registrarse las posiciones, y la operación de base enturbia el mensaje direccional.',
+  },
+  cotAssetNet: {
+    name: 'Posición neta de gestoras en CME (% del IA)',
+    short: 'Gestoras CME',
+    description: 'Gestoras de activos en los futuros de Bitcoin de CME: largos menos cortos, como parte del interés abierto. Semanal, del informe Commitments of Traders de la CFTC.',
+    read: ['Las gestoras de activos en CME suelen estar netas en largo: mide la exposición direccional institucional a través de futuros.'],
+    caveat: 'Semanal, publicado con tres días de retraso; los ETF spot concentran ahora gran parte de la exposición institucional fuera de los futuros.',
+  },
+  dxy: {
+    name: 'Índice del dólar (DXY)',
+    short: 'DXY',
+    description: 'El dólar frente a una cesta de grandes divisas. Un dólar al alza ha tendido a pesar sobre bitcoin y otros activos de riesgo.',
+    read: [
+      'Un dólar al alza endurece las condiciones financieras globales y ha tendido a pesar sobre bitcoin; un dólar a la baja ha tendido a ayudar.',
+      'Como entrada del modelo se usa la variación a 30 días, no el nivel.',
+    ],
+    caveat: 'La relación es laxa y cambia con el tiempo; hay largos periodos en que bitcoin ignora al dólar.',
+  },
+  us10y: {
+    name: 'Rendimiento del bono de EE. UU. a 10 años',
+    short: 'EE. UU. 10a',
+    description: 'Rendimiento de la deuda pública estadounidense a 10 años: el precio del dinero. Las subidas rápidas endurecen las condiciones financieras.',
+    read: [
+      'Rendimientos de largo plazo más altos hacen más atractivos el efectivo y los bonos y tienden a presionar a los activos especulativos, sobre todo si suben rápido.',
+      'Como entrada del modelo se usa la variación a 30 días en puntos porcentuales.',
+    ],
+    caveat: 'Los rendimientos pueden subir por buenas razones (crecimiento fuerte) o malas, así que la dirección sola es ambigua.',
+  },
+  nasdaqMom: {
+    name: 'Rentabilidad del Nasdaq a 30 días',
+    short: 'Nasdaq 30d',
+    description: 'Cómo se movió el Nasdaq Composite en los últimos 30 días. Bitcoin a menudo se ha movido con las tecnológicas en las fases de apetito y aversión al riesgo.',
+    read: ['Bitcoin a menudo se ha movido con las tecnológicas en fases de apetito y aversión al riesgo. Una caída fuerte del Nasdaq ha tendido a arrastrar a bitcoin.'],
+    caveat: 'La correlación va y viene; en algunos periodos bitcoin se mueve por su propia historia.',
+  },
+  goldMom: {
+    name: 'Rentabilidad del oro a 30 días',
+    short: 'Oro 30d',
+    description: 'Cómo se movió el oro en los últimos 30 días: el depósito de valor tradicional con el que a menudo se compara a bitcoin.',
+    read: ['El oro y bitcoin se ven como coberturas frente a la devaluación de la moneda; un impulso fuerte del oro a veces precede a que bitcoin lo alcance.'],
+    caveat: 'La relación es débil e inconstante; tómala como contexto.',
+  },
+  ibitVolume: {
+    name: 'Volumen en dólares del ETF spot IBIT (media 20d)',
+    short: 'Volumen IBIT',
+    description: 'Valor negociado diario de IBIT de BlackRock, el mayor ETF spot de bitcoin de EE. UU., en media de 20 días: un indicador de actividad institucional. Historial desde enero de 2024.',
+    read: ['Valor medio negociado por día del mayor ETF spot de bitcoin de EE. UU. Los picos de volumen marcan fases de mucha actividad institucional, en cualquier dirección.'],
+    caveat: 'El volumen no es flujo neto: no dice si el dinero entró o salió. Historial solo desde enero de 2024.',
+  },
+};
+
+const pt: Record<string, MetricText> = {
+  sma200: {
+    name: 'Média móvel de 200 dias',
+    short: 'SMA 200',
+    description: 'Linha de tendência de longo prazo. O preço acima dela é o regime de alta clássico.',
+    read: [
+      'Preço acima de uma média de 200 dias ascendente: tendência de alta de longo prazo. Recuos até a linha costumam encontrar compradores.',
+      'Preço abaixo de uma linha descendente: tendência de baixa de longo prazo. Repiques até a linha costumam ser vendidos.',
+      'Um cruzamento da linha marca uma mudança de regime mais do que um sinal de entrada.',
+    ],
+    caveat: 'É lenta por natureza: confirma uma tendência meses depois do início e gera sinais falsos em mercados laterais.',
+  },
+  sma50: {
+    name: 'Média móvel de 50 dias',
+    short: 'SMA 50',
+    description: 'Linha de tendência de médio prazo.',
+    read: [
+      'Acompanha a tendência de médio prazo. Acima dela, o momento favorece os compradores; abaixo, os vendedores.',
+      'O cruzamento da média de 50 dias acima da de 200 ("golden cross") ou abaixo ("death cross") é um sinal muito observado e atrasado.',
+    ],
+    caveat: 'Cruzamentos são frequentes em mercados agitados e muitas vezes chegam depois de boa parte do movimento.',
+  },
+  supertrend: {
+    name: 'Supertrend (10, 3)',
+    short: 'Supertrend',
+    description: 'Uma linha que acompanha o preço a três amplitudes médias verdadeiras de distância. Abaixo do preço (verde) a tendência é de alta; acima (vermelha), de baixa. Um fechamento que a atravessa a inverte.',
+    read: [
+      'Verde e abaixo do preço: tendência de alta. A linha só sobe, então funciona como stop móvel para compras.',
+      'Vermelha e acima do preço: tendência de baixa. A linha só desce, um stop móvel para vendas.',
+      'O sinal é a virada (um fechamento que atravessa a linha); a distância até a linha é a folga que a tendência tem antes de virar.',
+    ],
+    caveat: 'Sempre mostra uma tendência, então em mercados laterais vira de um lado para o outro e cada virada custa um pouco. Também reage tarde por natureza.',
+  },
+  bbUpper: {
+    name: 'Bandas de Bollinger (20, 2σ)',
+    short: 'Bollinger',
+    description: 'Dois desvios-padrão em torno da média de 20 dias. Bandas estreitas antecedem uma expansão.',
+    read: [
+      'As bandas se alargam quando a volatilidade sobe e se estreitam quando cai. Bandas muito estreitas ("squeeze") costumam anteceder um movimento grande, de direção incerta.',
+      'Um fechamento fora de uma banda mostra força ou fraqueza incomum; em tendência, o preço pode "andar" sobre uma banda por semanas.',
+    ],
+    caveat: 'Tocar uma banda não é, por si só, um sinal de reversão.',
+  },
+  sthRealizedPrice: {
+    name: 'Preço realizado dos detentores de curto prazo',
+    short: 'Custo STH',
+    description: 'Custo médio on-chain das moedas movimentadas nos últimos 155 dias. Funciona como suporte em tendências de alta e resistência em tendências de baixa. A fonte gratuita cobre os últimos 4 anos.',
+    read: [
+      'O preço médio pago pelas moedas que se moveram nos últimos ~5 meses: o ponto de equilíbrio dos compradores recentes.',
+      'Em tendências de alta o preço tende a se manter acima (os compradores recentes defendem a entrada). Em tendências de baixa vira resistência (eles vendem ao recuperar o preço).',
+    ],
+    caveat: 'A fonte gratuita chega com 7 dias de atraso e cobre 4 anos, então use como zona, não como nível exato.',
+  },
+  realizedPrice: {
+    name: 'Preço realizado',
+    short: 'Preço realizado',
+    description: 'Custo médio on-chain de todas as moedas (capitalização ÷ MVRV ÷ oferta). Piso histórico dos mercados de baixa.',
+    read: [
+      'O preço médio pelo qual cada moeda se moveu pela última vez: o custo de todo o mercado.',
+      'O preço só passou breves períodos abaixo dele, no fundo dos mercados de baixa (2015, 2018–19, 2022).',
+    ],
+    caveat: 'Move-se muito devagar e não diz nada sobre as próximas semanas.',
+  },
+  rsi14: {
+    name: 'RSI (14)',
+    short: 'RSI',
+    description: 'Índice de força relativa sobre fechamentos diários. Acima de 70 é sobrecompra; abaixo de 30, sobrevenda.',
+    read: [
+      'Acima de 70: sobrecompra. Momento forte, mas esticado. Abaixo de 30: sobrevenda. Vendas fortes, mas esticadas.',
+      'Em torno de 50 é neutro; manter-se acima de 50 nos recuos é típico de tendências de alta.',
+      'Divergências (preço e RSI discordando em topos ou fundos sucessivos) indicam que um movimento está perdendo força. Ative-as sob RSI na lista de métricas.',
+    ],
+    caveat: 'Em tendências fortes o RSI pode ficar em sobrecompra ou sobrevenda por semanas. Os extremos dizem "esticado", não "prestes a virar".',
+  },
+  mom30: {
+    name: 'Retorno de 30 dias',
+    short: 'Mom 30d',
+    description: 'Variação do preço nos últimos 30 dias.',
+    read: [
+      'Simplesmente quanto o preço mudou em 30 dias. Valores muito positivos indicam uma alta forte recente; muito negativos, uma queda acentuada.',
+      'O Bitcoin já mostrou tanto momento (meses fortes seguidos de mais força) quanto reversão à média após movimentos extremos.',
+    ],
+    caveat: 'Traz quase a mesma informação que o RSI; usar os dois como entradas do modelo acrescenta pouco.',
+  },
+  mayer: {
+    name: 'Múltiplo de Mayer',
+    short: 'Mayer',
+    description: 'Preço ÷ média de 200 dias. Acima de 2,4 marcou mercados superaquecidos; abaixo de 0,8, valor profundo.',
+    read: [
+      'Acima de 2,4: o preço está muito acima da tendência de longo prazo, historicamente uma zona de superaquecimento.',
+      'Em torno de 1: o preço está na média de 200 dias. Abaixo de 0,8: desconto profundo, visto perto dos fundos de baixa.',
+    ],
+    caveat: 'Os picos foram mais baixos a cada ciclo, então limiares fixos de ciclos antigos talvez nunca mais sejam alcançados.',
+  },
+  vol30: {
+    name: 'Volatilidade realizada (30d)',
+    short: 'Vol 30d',
+    description: 'Desvio-padrão anualizado dos retornos diários em 30 dias.',
+    read: [
+      'Quanto o preço vem se movendo, anualizado. Leituras baixas indicam um mercado calmo; altas, um mercado turbulento.',
+      'A volatilidade se agrupa: calmaria segue calmaria e tempestade segue tempestade, até uma mudança de regime. Leituras incomumente baixas muitas vezes antecederam grandes movimentos em qualquer direção.',
+    ],
+    caveat: 'Mede o tamanho dos movimentos, não a direção.',
+  },
+  dvol: {
+    name: 'Volatilidade implícita (DVOL)',
+    short: 'DVOL',
+    description: 'Índice de volatilidade implícita de 30 dias da Deribit: o que o mercado de opções está precificando.',
+    read: [
+      'A volatilidade que os operadores de opções esperam para os próximos 30 dias. Divida por ~19 para obter o movimento diário típico implícito em %.',
+      'Acima da volatilidade realizada: o mercado paga por proteção (nervoso). Abaixo: complacência.',
+    ],
+    caveat: 'O histórico começa em 2021 e, como a volatilidade realizada, não aponta direção.',
+  },
+  ddDays10: {
+    name: 'Dias sem uma queda de 10%',
+    short: 'Sem −10% há',
+    description: 'Dias desde a última vez que o preço caiu 10% a partir do topo da perna atual.',
+    read: [
+      'Conta os dias desde a última queda de 10% a partir do topo da perna atual. Contagens longas indicam uma alta incomumente suave.',
+      'O Bitcoin raramente passa mais de alguns meses sem uma queda de 10%, então uma contagem alta diz que uma correção está estatisticamente "atrasada", sem dizer quando.',
+    ],
+    caveat: 'O contador zera com a própria queda; uma contagem baixa pode significar "acabou de corrigir" ou "está em queda".',
+  },
+  ddDays15: {
+    name: 'Dias sem uma queda de 15%',
+    short: 'Sem −15% há',
+    description: 'Dias desde a última vez que o preço caiu 15% a partir do topo da perna atual.',
+    read: ['A mesma ideia com um limiar de 15%: o tempo desde a última correção média.'],
+    caveat: 'Muito relacionado aos contadores de 10% e 20%; normalmente um dos três carrega a informação.',
+  },
+  ddDays20: {
+    name: 'Dias sem uma queda de 20%',
+    short: 'Sem −20% há',
+    description: 'Dias desde a última vez que o preço caiu 20% a partir do topo da perna atual.',
+    read: [
+      'Dias desde a última correção de 20%. Períodos longos são típicos de fases de alta maduras e de faixas calmas, de baixa volatilidade.',
+      'Comparado ao contador de 10%, mostra se a fraqueza recente é um recuo leve (10% zerado, 20% ainda contando) ou uma correção de verdade.',
+    ],
+  },
+  ddDays25: {
+    name: 'Dias sem uma queda de 25%',
+    short: 'Sem −25% há',
+    description: 'Dias desde a última vez que o preço caiu 25% a partir do topo da perna atual.',
+    read: ['Dias desde a última correção de 25%. Quedas desse tamanho são mais raras e costumam marcar o fim de uma perna, e não um recuo dentro dela.'],
+    caveat: 'Muito relacionado aos contadores de 20% e 30%.',
+  },
+  ddDays30: {
+    name: 'Dias sem uma queda de 30%',
+    short: 'Sem −30% há',
+    description: 'Dias desde a última vez que o preço caiu 30% a partir do topo da perna atual.',
+    read: [
+      'Dias desde a última correção de 30%. Em mercados de alta anteriores, quedas de 30% eram a correção "profunda" típica; contagens longas indicam que a alta durou incomumente sem uma.',
+    ],
+    caveat: 'São eventos pouco frequentes, então o contador diz pouco sobre as próximas semanas.',
+  },
+  ddDays35: {
+    name: 'Dias sem uma queda de 35%',
+    short: 'Sem −35% há',
+    description: 'Dias desde a última vez que o preço caiu 35% a partir do topo da perna atual.',
+    read: ['Dias desde a última correção de 35%: mede há quanto tempo houve uma grande liquidação ou a última perna de baixa.'],
+    caveat: 'Existem apenas algumas dezenas de eventos assim em todo o histórico.',
+  },
+  ddAth: {
+    name: 'Queda desde a máxima histórica',
+    short: 'Desde ATH',
+    description: 'Quanto o preço está abaixo da máxima histórica.',
+    read: [
+      'Quanto o preço está abaixo da máxima histórica. Perto de 0%: descoberta de preço. De −20% a −40%: correção comum de mercado de alta ou início de baixa.',
+      'Além de −50%: mercado de baixa. Os ciclos anteriores fizeram fundo entre −75% e −85%.',
+    ],
+    caveat: 'Descreve em que ponto do ciclo estamos, não o que vem a seguir.',
+  },
+  sthMvrv: {
+    name: 'STH-MVRV',
+    short: 'STH-MVRV',
+    description: 'Preço ÷ custo dos detentores de curto prazo: o ganho ou perda não realizado dos compradores recentes. Abaixo de 1 estão no prejuízo. Fonte gratuita: só os últimos 4 anos, então usá-lo como entrada do modelo encurta o histórico de análogos.',
+    read: [
+      'O preço dividido pelo custo dos compradores recentes. Acima de 1 estão no lucro; abaixo de 1, no prejuízo.',
+      'Em torno de 1 é um ponto de decisão: suporte em tendências de alta, resistência em tendências de baixa. Acima de ~1,3 os compradores recentes acumulam grandes ganhos e costuma haver realização de lucros.',
+      'Bem abaixo de 1 (0,8–0,9) marca a capitulação dos compradores recentes, comum perto de fundos locais.',
+    ],
+    caveat: 'Os dados gratuitos chegam com 7 dias de atraso e se limitam a 4 anos.',
+  },
+  sthBehavior: {
+    name: 'Análise de comportamento dos detentores de curto prazo',
+    short: 'Comportamento STH',
+    description: 'STH-MVRV medido em relação à própria média de 90 dias, com bandas um desvio-padrão acima e abaixo do nível habitual. Mostra quando os compradores recentes estão incomumente no lucro ou no prejuízo em comparação com os últimos três meses.',
+    read: [
+      'Acima da banda superior (+1σ): os compradores recentes estão incomumente no lucro em relação aos últimos 90 dias. Esses períodos superaquecidos tenderam a vir antes de topos locais ou pausas, à medida que a realização de lucros cresce.',
+      'Abaixo da banda inferior (−1σ): os compradores recentes estão incomumente no prejuízo. Esses períodos de capitulação tenderam a vir perto de fundos locais, quando os detentores mais fracos já venderam.',
+      'Cruzar de volta o zero marca a passagem entre os compradores recentes ganhando ou perdendo terreno em relação à norma de três meses.',
+    ],
+    caveat: 'Em uma tendência sustentada pode ficar além de uma banda por semanas. A fonte gratuita chega com 7 dias de atraso e cobre 4 anos, então as bandas só começam em 2023; a linha segue a ideia de um gráfico publicado da Glassnode, não a fórmula exata.',
+  },
+  sthSopr: {
+    name: 'STH-SOPR (média 7d)',
+    short: 'STH-SOPR',
+    description: 'Razão de lucro/prejuízo realizado das moedas gastas por detentores de curto prazo. Abaixo de 1 vendem no prejuízo (capitulação); bem acima de 1 realizam lucros. Fonte gratuita: só os últimos 4 anos, então usá-lo como entrada do modelo encurta o histórico de análogos.',
+    read: [
+      'Se as moedas vendidas por compradores recentes foram vendidas com lucro (acima de 1) ou prejuízo (abaixo de 1), em média de 7 dias.',
+      'Em tendências de alta, quedas até 1 costumam ser compradas (os detentores se recusam a vender no prejuízo). Em tendências de baixa, repiques até 1 costumam ser vendidos.',
+      'Leituras sustentadas abaixo de 1 são capitulação; picos bem acima de 1 são realização de lucros agressiva.',
+    ],
+    caveat: 'Chega com 7 dias de atraso na fonte gratuita, então descreve a semana passada.',
+  },
+  mvrv: {
+    name: 'MVRV',
+    short: 'MVRV',
+    description: 'Valor de mercado ÷ valor realizado de todas as moedas. Acima de ~3,5 marcou topos de ciclo; abaixo de 1, fundos de ciclo.',
+    read: [
+      'O valor de mercado dividido pelo custo agregado de todas as moedas: o múltiplo de lucro não realizado do detentor médio.',
+      'Acima de ~3,5: zona histórica de topo de ciclo. Abaixo de 1: o detentor médio está no prejuízo, zona histórica de fundo de ciclo.',
+    ],
+    caveat: 'Um indicador lento, em escala de ciclo. Os picos vêm caindo ciclo após ciclo.',
+  },
+  exchNetflow: {
+    name: 'Fluxo líquido para corretoras (7d, % da cap.)',
+    short: 'Fluxo corretoras',
+    description: 'Moedas enviadas a corretoras menos moedas sacadas em 7 dias, em relação à capitalização. Positivo = oferta indo para as corretoras.',
+    read: ['Moedas entrando nas corretoras menos as que saem, em 7 dias. Entradas são oferta potencial de venda; saídas sugerem moedas indo para custódia.'],
+    caveat: 'A identificação de carteiras de corretoras é imperfeita, e fluxos de ETF e custodiantes turvam o quadro.',
+  },
+  funding: {
+    name: 'Funding de perpétuos (média 7d, anualizado)',
+    short: 'Funding',
+    description: 'O que as posições compradas pagam às vendidas nos perpétuos da Binance. Funding positivo alto = compras lotadas; negativo = vendas lotadas.',
+    read: [
+      'A taxa que os comprados pagam aos vendidos em futuros perpétuos. Positiva e alta: os comprados estão lotados e pagam para continuar, terreno para liquidações de compras.',
+      'Negativa: os vendidos estão lotados, terreno para um short squeeze. Em torno de 10% anualizado é a referência neutra.',
+    ],
+    caveat: 'Os extremos podem persistir durante uma tendência; é um indicador de posicionamento mais do que de timing.',
+  },
+  fng: {
+    name: 'Índice de medo e ganância',
+    short: 'Medo e ganância',
+    description: 'Índice composto de sentimento, de 0 (medo extremo) a 100 (ganância extrema).',
+    read: [
+      'Uma mistura de 0 a 100 de volatilidade, momento, redes sociais e dominância. Abaixo de 25: medo extremo. Acima de 75: ganância extrema.',
+      'Leitura contrária clássica: medo perto dos fundos, ganância perto dos topos.',
+    ],
+    caveat: 'É construído em grande parte a partir do próprio preço, então sobretudo repete o desempenho recente.',
+  },
+  stableGrowth: {
+    name: 'Crescimento da oferta de stablecoins (30d)',
+    short: 'Stablecoins Δ30d',
+    description: 'Variação da oferta total de stablecoins em USD em 30 dias: novo poder de compra entrando em cripto.',
+    read: ['A que ritmo cresce a oferta total de stablecoins em dólar. Crescimento indica novo poder de compra chegando a cripto; contração, dinheiro saindo.'],
+    caveat: 'Stablecoins também são usadas fora do trading (pagamentos, DeFi), e a oferta reage ao preço com atraso.',
+  },
+  cycleDay: {
+    name: 'Dias desde o halving',
+    short: 'Desde o halving',
+    description: 'Posição no ciclo de quatro anos do halving. É a entrada com melhor backtest, mas se baseia em apenas três ciclos completos: trate-a como uma hipótese inicial, não como uma lei.',
+    read: [
+      'Dias desde o último halving da recompensa por bloco (aproximadamente a cada quatro anos). Os ciclos anteriores fizeram topo cerca de 12–18 meses após um halving e fundo cerca de um ano depois.',
+    ],
+    caveat: 'Três ciclos completos é uma amostra minúscula, e o efeito sobre a oferta de cada halving é menor que o do anterior.',
+  },
+  puell: {
+    name: 'Múltiplo de Puell',
+    short: 'Puell',
+    description: 'Valor diário das moedas recém-mineradas ÷ sua média de 365 dias: quanto os mineradores estão ganhando. Acima de ~4 marcou topos de ciclo; abaixo de ~0,5, capitulação dos mineradores perto dos fundos.',
+    read: [
+      'Os mineradores vendem parte do que mineram para cobrir custos, então a receita deles define uma pressão vendedora constante. Acima de ~4 ganham muito mais que o normal e as vendas tendem a aumentar; os topos de ciclos anteriores ficaram ali.',
+      'Abaixo de ~0,5 os mineradores ganham muito menos que o normal e os mais fracos desligam as máquinas: historicamente, uma zona de capitulação perto dos fundos de ciclo.',
+    ],
+    caveat: 'Cada halving corta a emissão pela metade, então as leituras mudam bruscamente em torno dos halvings, e as taxas pesam cada vez mais.',
+  },
+  exSupply: {
+    name: 'Oferta nas corretoras (% da oferta)',
+    short: 'Oferta corretoras',
+    description: 'Parte de todos os bitcoins guardada em carteiras conhecidas de corretoras. Uma parte em queda indica moedas indo para autocustódia; em alta, moedas disponíveis para venda.',
+    read: [
+      'Parte de todas as moedas em carteiras conhecidas de corretoras. Uma queda contínua indica que os detentores estão levando as moedas para autocustódia, o que reduz a oferta pronta para venda.',
+      'Uma parte em alta indica moedas entrando nas corretoras, muitas vezes antes de vendas.',
+    ],
+    caveat: 'A identificação de carteiras de corretoras é imperfeita, e ETFs e custodiantes guardam moedas fora das corretoras, então a tendência de longo prazo é mais clara que as oscilações curtas.',
+  },
+  txCount: {
+    name: 'Transações por dia (média 30d)',
+    short: 'Transações',
+    description: 'Transações on-chain por dia, em média de 30 dias: uma medida aproximada do uso da rede.',
+    read: ['Número médio de transações on-chain por dia em 30 dias. Uso crescente junto com preço crescente é uma alta mais saudável que a do preço sozinho.'],
+    caveat: 'O agrupamento de transações, as redes de camada 2 e as ondas de inscrições mudam a contagem sem dizer muito sobre a demanda por bitcoin.',
+  },
+  fees: {
+    name: 'Taxas de transação (média 7d, USD/dia)',
+    short: 'Taxas',
+    description: 'Taxas pagas aos mineradores por dia em USD, em média de 7 dias. Picos marcam blocos lotados, normalmente em fases especulativas.',
+    read: ['Total de taxas pagas aos mineradores por dia em USD. Picos marcam blocos lotados, normalmente em fases especulativas ou de estresse.'],
+    caveat: 'Uma única onda de inscrições ou uma semana congestionada pode dominar a série.',
+  },
+  premium: {
+    name: 'Prêmio dos perpétuos sobre o spot (média 7d)',
+    short: 'Prêmio perps',
+    description: 'Quanto os futuros perpétuos da Binance são negociados acima (ou abaixo) do spot, em média de 7 dias. Um prêmio amplo significa que os operadores pagam caro pela alavancagem na compra.',
+    read: [
+      'Positivo: os perpétuos ficam acima do spot porque os operadores pagam por compras alavancadas. Um prêmio amplo e persistente é sinal de lotação.',
+      'Negativo: os perpétuos ficam abaixo do spot, algo comum após limpezas de alavancagem e em mercados com medo.',
+    ],
+    caveat: 'Só Binance e só desde o fim de 2019, então como entrada do modelo encurta o histórico de análogos.',
+  },
+  hlFunding: {
+    name: 'Funding da Hyperliquid (média 7d, anualizado)',
+    short: 'Funding HL',
+    description: 'O que os comprados pagam aos vendidos na Hyperliquid, a maior corretora de perpétuos on-chain. Uma segunda visão da lotação, com operadores diferentes dos da Binance.',
+    read: ['A mesma ideia do funding da Binance, medida na Hyperliquid. Quando os dois estão altos ao mesmo tempo, a lotação é generalizada e não restrita a uma corretora.'],
+    caveat: 'O histórico só começa em meados de 2023, então aparece no gráfico mas não é oferecido como entrada do modelo.',
+  },
+  oi: {
+    name: 'Contratos em aberto (Bybit, USD)',
+    short: 'Contratos em aberto',
+    description: 'Valor nocional dos contratos perpétuos BTCUSDT em aberto na Bybit, diário desde 2020.',
+    caveat: 'Só Bybit (uma grande corretora entre várias), diário desde 2020.',
+  },
+  oiChange30: {
+    name: 'Variação dos contratos em aberto (30d)',
+    short: 'CA Δ30d',
+    description: 'Variação dos contratos em aberto da Bybit (em BTC) em 30 dias. Crescimento rápido indica alavancagem entrando; uma queda brusca, posições sendo limpas.',
+    read: [
+      'Acima de ~+20%: os contratos em aberto cresceram rápido, alavancagem nova entrando. Altas apoiadas em alavancagem são propensas a cascatas de liquidação.',
+      'Abaixo de ~−20%: posições foram fechadas ou liquidadas; a alavancagem foi limpa, o que muitas vezes abre caminho para uma tendência mais calma.',
+    ],
+    caveat: 'Só Bybit e medido em BTC, histórico desde 2020. Como entrada do modelo encurta o histórico de análogos para esse período.',
+  },
+  lsRatio: {
+    name: 'Razão de contas compradas/vendidas',
+    short: 'Razão L/S',
+    description: 'Contas líquidas compradas ÷ contas líquidas vendidas nos perpétuos da Bybit, diário desde 2020. Indicador do posicionamento do varejo.',
+    caveat: 'A razão fica acima de 1 na maior parte do tempo, então compare com o próprio histórico e não com 1.',
+  },
+  putCall: {
+    name: 'Razão put/call de opções (contratos em aberto)',
+    short: 'Put/call',
+    description: 'Contratos em aberto de opções de venda (puts) de BTC ÷ opções de compra (calls) na Deribit. Mais alto significa mais proteção contra uma queda. Sem histórico gratuito: acumula-se localmente desde o dia em que o app rodou pela primeira vez.',
+    read: [
+      'Acima de 1: há mais puts em aberto que calls, os operadores estão se protegendo contra uma queda. Leituras muito altas costumam vir perto de fundos locais, quando o medo já está precificado.',
+      'Abaixo de ~0,6: posicionamento otimista, carregado de calls.',
+    ],
+    caveat: 'Não há histórico gratuito: a linha é construída localmente desde o dia em que você rodou o app pela primeira vez, um valor por dia.',
+  },
+  cotLevNet: {
+    name: 'Posição líquida dos fundos alavancados na CME (% dos CA)',
+    short: 'Fundos alav. CME',
+    description: 'Hedge funds e outros operadores alavancados nos futuros de Bitcoin da CME: compras menos vendas, como parte dos contratos em aberto. Semanal, do relatório Commitments of Traders da CFTC.',
+    read: [
+      'Os hedge funds na CME costumam estar líquidos vendidos porque fazem operações de base (comprados em spot ou ETF, vendidos em futuros), então uma leitura negativa é normal.',
+      'Importam mais os afastamentos do nível habitual que o sinal: uma posição vendida desfeita rapidamente pode acrescentar pressão compradora.',
+    ],
+    caveat: 'Dados semanais, publicados três dias depois do registro das posições, e a operação de base turva a mensagem direcional.',
+  },
+  cotAssetNet: {
+    name: 'Posição líquida das gestoras na CME (% dos CA)',
+    short: 'Gestoras CME',
+    description: 'Gestoras de recursos nos futuros de Bitcoin da CME: compras menos vendas, como parte dos contratos em aberto. Semanal, do relatório Commitments of Traders da CFTC.',
+    read: ['As gestoras de recursos na CME costumam estar líquidas compradas: mede a exposição direcional institucional via futuros.'],
+    caveat: 'Semanal, publicado com três dias de atraso; os ETFs spot concentram agora boa parte da exposição institucional fora dos futuros.',
+  },
+  dxy: {
+    name: 'Índice do dólar (DXY)',
+    short: 'DXY',
+    description: 'O dólar contra uma cesta de grandes moedas. Um dólar em alta costuma pesar sobre o bitcoin e outros ativos de risco.',
+    read: [
+      'Um dólar em alta aperta as condições financeiras globais e costuma pesar sobre o bitcoin; um dólar em queda costuma ajudar.',
+      'Como entrada do modelo usa-se a variação de 30 dias, não o nível.',
+    ],
+    caveat: 'A relação é frouxa e muda com o tempo; há longos períodos em que o bitcoin ignora o dólar.',
+  },
+  us10y: {
+    name: 'Rendimento do título de 10 anos dos EUA',
+    short: 'EUA 10a',
+    description: 'Rendimento da dívida pública americana de 10 anos: o preço do dinheiro. Altas rápidas apertam as condições financeiras.',
+    read: [
+      'Rendimentos de longo prazo mais altos tornam caixa e títulos mais atraentes e tendem a pressionar ativos especulativos, sobretudo quando sobem rápido.',
+      'Como entrada do modelo usa-se a variação de 30 dias em pontos percentuais.',
+    ],
+    caveat: 'Os rendimentos podem subir por bons motivos (crescimento forte) ou maus, então a direção sozinha é ambígua.',
+  },
+  nasdaqMom: {
+    name: 'Retorno do Nasdaq em 30 dias',
+    short: 'Nasdaq 30d',
+    description: 'Como o Nasdaq Composite se moveu nos últimos 30 dias. O bitcoin muitas vezes se moveu com as ações de tecnologia em ondas de apetite e aversão ao risco.',
+    read: ['O bitcoin muitas vezes se moveu com as ações de tecnologia em ondas de apetite e aversão ao risco. Uma queda forte do Nasdaq costuma arrastar o bitcoin junto.'],
+    caveat: 'A correlação vai e vem; em alguns períodos o bitcoin segue a própria história.',
+  },
+  goldMom: {
+    name: 'Retorno do ouro em 30 dias',
+    short: 'Ouro 30d',
+    description: 'Como o ouro se moveu nos últimos 30 dias: a reserva de valor tradicional com que o bitcoin costuma ser comparado.',
+    read: ['Ouro e bitcoin são vistos como proteções contra a desvalorização da moeda; um momento forte do ouro às vezes antecede o bitcoin alcançá-lo.'],
+    caveat: 'A relação é fraca e inconstante; trate-a como contexto.',
+  },
+  ibitVolume: {
+    name: 'Volume em dólares do ETF spot IBIT (média 20d)',
+    short: 'Volume IBIT',
+    description: 'Valor negociado diário do IBIT da BlackRock, o maior ETF spot de bitcoin dos EUA, em média de 20 dias: um indicador de atividade institucional. Histórico desde janeiro de 2024.',
+    read: ['Valor médio negociado por dia do maior ETF spot de bitcoin dos EUA. Picos de volume marcam períodos de muita atividade institucional, em qualquer direção.'],
+    caveat: 'Volume não é fluxo líquido: não diz se o dinheiro entrou ou saiu. Histórico só desde janeiro de 2024.',
+  },
+};
+
+export const METRIC_TEXT: Record<'es' | 'pt', Record<string, MetricText>> = { es, pt };

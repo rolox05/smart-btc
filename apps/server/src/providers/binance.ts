@@ -46,7 +46,8 @@ function intradayProvider(interval: '15m' | '1h' | '4h', barSec: number, history
     id: `binance-${interval}`,
     name: `Binance ${interval} candles`,
     url: 'https://api.binance.com',
-    provides: `BTC/USDT ${interval} candles (${span}) for the ${interval} timeframe`,
+    provides: 'BTC/USDT {interval} candles ({span}) for the {interval} timeframe',
+    providesVars: { interval, span },
     intervalMs: 2 * MINUTE,
     async sync(store) {
       const last = await store.lastCandleT('binance', interval);

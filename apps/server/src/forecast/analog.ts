@@ -1,4 +1,5 @@
 import type { ForecastSettings } from '@smart-btc/shared';
+import { EN, type T } from '../i18n/index.js';
 import type { Dataset } from '../analytics/dataset.js';
 import type { Arr } from '../analytics/indicators.js';
 import { METRIC_BY_ID } from '../analytics/metrics.js';
@@ -63,12 +64,123 @@ export interface FeatureModel {
   pn: Float64Array[];
   ps: Float64Array[];
   ps2: Float64Array[];
+  /** Prefix sums over complete rows for the expanding covariance (built on first use). */
+  cov?: { cnt: Float64Array; sum: Float64Array[]; cross: Float64Array[] };
+}
+
+/** Tested defaults for the model internals (see scripts/model-bench.mts). */
+export const MODEL_DEFAULTS = {
+  distance: 'mahalanobis' as 'euclidean' | 'mahalanobis',
+  analogGapFraction: 0,
+  kernel: 'median' as 'wide' | 'median',
+  blendMode: 'fixed' as 'fixed' | 'adaptive',
+  blendKappa: 20,
+};
+const opt = <K extends keyof typeof MODEL_DEFAULTS>(s: ForecastSettings, k: K): (typeof MODEL_DEFAULTS)[K] =>
+  (s[k] ?? MODEL_DEFAULTS[k]) as (typeof MODEL_DEFAULTS)[K];
+
+function buildCov(model: FeatureModel) {
+  const F = model.cols.length;
+  const n = model.complete.length;
+  const cnt = new Float64Array(n + 1);
+  const sum = Array.from({ length: F }, () => new Float64Array(n + 1));
+  const cross = Array.from({ length: (F * (F + 1)) / 2 }, () => new Float64Array(n + 1));
+  for (let i = 0; i < n; i++) {
+    const ok = model.complete[i] ? 1 : 0;
+    cnt[i + 1] = cnt[i] + ok;
+    let k = 0;
+    for (let f = 0; f < F; f++) {
+      const xf = ok ? model.cols[f][i] : 0;
+      sum[f][i + 1] = sum[f][i] + xf;
+      for (let g = f; g < F; g++) {
+        cross[k][i + 1] = cross[k][i] + (ok ? xf * model.cols[g][i] : 0);
+        k++;
+      }
+    }
+  }
+  model.cov = { cnt, sum, cross };
+}
+
+/**
+ * Whitening matrix W (lower-triangular inverse of the Cholesky factor) of the feature covariance
+ * estimated from complete rows up to q, so that distances stop double-counting correlated inputs.
+ */
+function whitening(model: FeatureModel, q: number): Float64Array[] | null {
+  if (!model.cov) buildCov(model);
+  const { cnt, sum, cross } = model.cov!;
+  const F = model.cols.length;
+  const c = cnt[q + 1];
+  if (c < 60) return null;
+  const C = Array.from({ length: F }, () => new Float64Array(F));
+  let k = 0;
+  for (let f = 0; f < F; f++) {
+    for (let g = f; g < F; g++) {
+      const v = cross[k][q + 1] / c - (sum[f][q + 1] / c) * (sum[g][q + 1] / c);
+      C[f][g] = C[g][f] = v;
+      k++;
+    }
+  }
+  // Small ridge keeps nearly collinear inputs from blowing up the inverse.
+  let tr = 0;
+  for (let f = 0; f < F; f++) tr += C[f][f];
+  for (let f = 0; f < F; f++) C[f][f] += (1e-3 * tr) / F;
+  const L = Array.from({ length: F }, () => new Float64Array(F));
+  for (let i = 0; i < F; i++) {
+    for (let j = 0; j <= i; j++) {
+      let acc = C[i][j];
+      for (let m = 0; m < j; m++) acc -= L[i][m] * L[j][m];
+      if (i === j) {
+        if (!(acc > 0)) return null;
+        L[i][i] = Math.sqrt(acc);
+      } else L[i][j] = acc / L[j][j];
+    }
+  }
+  // Invert the lower-triangular L.
+  const W = Array.from({ length: F }, () => new Float64Array(F));
+  for (let i = 0; i < F; i++) {
+    W[i][i] = 1 / L[i][i];
+    for (let j = 0; j < i; j++) {
+      let acc = 0;
+      for (let m = j; m < i; m++) acc -= L[i][m] * W[m][j];
+      W[i][j] = acc / L[i][i];
+    }
+  }
+  return W;
+}
+
+/**
+ * Effective number of independent analogs. Analogs closer together than the horizon share part of
+ * their forward window, so their outcomes are correlated; this is the design-effect correction
+ * 1 / ΣΣ w_j w_k ρ_jk with ρ_jk = max(0, 1 − |i_j − i_k| / H).
+ */
+export function independentESS(idx: ArrayLike<number>, w: ArrayLike<number>, H: number): number {
+  let acc = 0;
+  for (let j = 0; j < idx.length; j++) {
+    acc += w[j] * w[j];
+    for (let k = j + 1; k < idx.length; k++) {
+      const rho = 1 - Math.abs(idx[j] - idx[k]) / Math.max(1, H);
+      if (rho > 0) acc += 2 * w[j] * w[k] * rho;
+    }
+  }
+  return acc > 0 ? 1 / acc : 0;
+}
+
+/** Weight of the unconditional base rate in the final distribution for this set of analogs. */
+export function baseWeight(s: ForecastSettings, nb: { effectiveN: number }): number {
+  if (opt(s, 'blendMode') === 'adaptive') {
+    const kappa = opt(s, 'blendKappa');
+    return clamp(kappa / (nb.effectiveN + kappa), 0.05, 0.95);
+  }
+  return s.baseRateBlend;
 }
 
 export function buildModel(
   ds: Dataset,
   ids: string[],
   startYear: number,
+  t: T = EN,
+  /** Bar whose value must exist for the feature to be usable (the forecast bar). Defaults to the last bar. */
+  atIndex?: number,
 ): { model: FeatureModel; dropped: { id: string; reason: string }[] } {
   const n = ds.n;
   const startT = Date.UTC(startYear, 0, 1) / 1000;
@@ -82,17 +194,17 @@ export function buildModel(
     const def = METRIC_BY_ID.get(id);
     const col = ds.features.get(id);
     if (!def?.forecastable || !col) {
-      dropped.push({ id, reason: 'not usable as a model feature' });
+      dropped.push({ id, reason: t('not usable as a model feature') });
       continue;
     }
-    if (Number.isNaN(col[n - 1])) {
-      dropped.push({ id, reason: 'no current value (data source unavailable or still syncing)' });
+    if (Number.isNaN(col[atIndex ?? n - 1])) {
+      dropped.push({ id, reason: t('no current value (data source unavailable or still syncing)') });
       continue;
     }
     let valid = 0;
     for (let i = start; i < n; i++) if (!Number.isNaN(col[i])) valid++;
     if (valid < Math.min(400, Math.floor((n - start) * 0.5))) {
-      dropped.push({ id, reason: `only ${valid} bars of history` });
+      dropped.push({ id, reason: t('only {n} bars of history', { n: valid }) });
       continue;
     }
     used.push(id);
@@ -147,6 +259,9 @@ export interface Neighbors {
   /** Volatility rescaling factor applied to each analog's forward path. */
   scale: number[];
   candidates: number;
+  /** Kish effective sample size from the weights alone. */
+  weightESS: number;
+  /** Effective number of independent analogs (weights and window overlap). */
   effectiveN: number;
   avgDistance: number;
 }
@@ -189,15 +304,27 @@ export function findNeighbors(
     inv[f] = 1 / featureStats(model, f, q).sd;
     qv[f] = model.cols[f][q];
   }
+  const W = F > 1 && opt(s, 'distance') === 'mahalanobis' ? whitening(model, q) : null;
+  const diff = new Float64Array(F);
 
   let m = 0;
   const stride = ds.stride;
   for (let i = Math.ceil(model.start / stride) * stride; i <= maxCand; i += stride) {
     if (!model.complete[i] || Number.isNaN(prep.fwd[i])) continue;
     let d2 = 0;
-    for (let f = 0; f < F; f++) {
-      const z = (model.cols[f][i] - qv[f]) * inv[f];
-      d2 += z * z;
+    if (W) {
+      for (let f = 0; f < F; f++) diff[f] = model.cols[f][i] - qv[f];
+      for (let f = 0; f < F; f++) {
+        let z = 0;
+        const row = W[f];
+        for (let g = 0; g <= f; g++) z += row[g] * diff[g];
+        d2 += z * z;
+      }
+    } else {
+      for (let f = 0; f < F; f++) {
+        const z = (model.cols[f][i] - qv[f]) * inv[f];
+        d2 += z * z;
+      }
     }
     dist[i] = Math.sqrt(d2 / F);
     order[m++] = i;
@@ -208,7 +335,7 @@ export function findNeighbors(
 
   // Greedy pick of the closest bars that are at least `minGapBars` apart from each other.
   const k = Math.min(s.k, m);
-  const gap = Math.max(1, s.minGapBars);
+  const gap = Math.max(1, s.minGapBars, Math.round(opt(s, 'analogGapFraction') * prep.H));
   const idx: number[] = [];
   for (let j = 0; j < m && idx.length < k; j++) {
     const i = cand[j];
@@ -222,8 +349,10 @@ export function findNeighbors(
     if (ok) idx.push(i);
   }
 
-  // Gaussian kernel on distance (bandwidth = the furthest analog), optionally decayed by age.
-  const bandwidth = dist[idx[idx.length - 1]] || 1;
+  // Gaussian kernel on distance, optionally decayed by age. The bandwidth is either the furthest
+  // analog (nearly uniform weights) or the median analog distance (favours the closest matches).
+  const bandwidth =
+    (opt(s, 'kernel') === 'median' ? dist[idx[Math.floor(idx.length / 2)]] : dist[idx[idx.length - 1]]) || 1;
   const w: number[] = [];
   const d: number[] = [];
   const scale: number[] = [];
@@ -243,7 +372,17 @@ export function findNeighbors(
     w[j] /= wSum;
     w2 += w[j] * w[j];
   }
-  return { idx, dist: d, w, scale, candidates: m, effectiveN: 1 / w2, avgDistance: dSum / idx.length };
+  return {
+    idx,
+    dist: d,
+    w,
+    scale,
+    candidates: m,
+    weightESS: 1 / w2,
+    // Overlapping forward windows are not independent evidence: report the overlap-corrected count.
+    effectiveN: independentESS(idx, w, prep.H),
+    avgDistance: dSum / idx.length,
+  };
 }
 
 /** Expected size of the move over the horizon (one standard deviation, %) at the volatility of bar q. */

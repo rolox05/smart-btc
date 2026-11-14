@@ -1,4 +1,9 @@
 import { durationLabel, type MetricUnit, type Timeframe } from '@smart-btc/shared';
+import { LOCALE, getLang, tr } from './i18n';
+
+const locale = () => LOCALE[getLang()];
+/** Short duration of `bars` on a timeframe in the active language. */
+export const dl = (tf: Timeframe, bars: number) => durationLabel(tf, bars, getLang());
 
 const usd0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const usd2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,7 +48,7 @@ export function fmtMetric(x: number | null | undefined, unit: MetricUnit): strin
 export const fmtDate = (sec: number | null | undefined, withYear = true) =>
   sec == null
     ? '–'
-    : new Date(sec * 1000).toLocaleDateString('en-GB', {
+    : new Date(sec * 1000).toLocaleDateString(locale(), {
         day: 'numeric',
         month: 'short',
         year: withYear ? 'numeric' : undefined,
@@ -51,24 +56,24 @@ export const fmtDate = (sec: number | null | undefined, withYear = true) =>
       });
 
 export function fmtAgo(ms: number | null | undefined): string {
-  if (!ms) return 'never';
+  if (!ms) return tr('never');
   const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 90) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86_400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86_400)} d ago`;
+  if (s < 90) return tr('just now');
+  if (s < 3600) return tr('{n} min ago', { n: Math.round(s / 60) });
+  if (s < 86_400) return tr('{n} h ago', { n: Math.round(s / 3600) });
+  return tr('{n} d ago', { n: Math.round(s / 86_400) });
 }
 
 /** A number of bars on a timeframe as an approximate duration, e.g. "~6h" or "~12d". */
-export const fmtBars = (tf: Timeframe, bars: number | null | undefined) => (bars == null ? '–' : `~${durationLabel(tf, Math.max(1, Math.round(bars)))}`);
+export const fmtBars = (tf: Timeframe, bars: number | null | undefined) => (bars == null ? '–' : `~${durationLabel(tf, Math.max(1, Math.round(bars)), getLang())}`);
 
 /** Bar timestamp: date only on daily and longer bars, date and UTC time on intraday ones. */
 export function fmtBarTime(sec: number | null | undefined, tf: Timeframe): string {
   if (sec == null) return '–';
   if (tf === '1d' || tf === '1w') return fmtDate(sec);
   const d = new Date(sec * 1000);
-  if (tf === '1M') return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
-  return `${fmtDate(sec, false)} ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
+  if (tf === '1M') return d.toLocaleDateString(locale(), { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return `${fmtDate(sec, false)} ${d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
 }
 
 /** Percentage with as many decimals as its size needs: 0.25%, 2.5%, 12%. */

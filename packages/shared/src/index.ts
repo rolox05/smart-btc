@@ -5,6 +5,38 @@
 
 export const DAY = 86_400;
 
+// ───────────────────────── languages ─────────────────────────
+
+export const LANGS = ['en', 'es', 'pt'] as const;
+export type Lang = (typeof LANGS)[number];
+export const LANG_NAME: Record<Lang, string> = { en: 'English', es: 'Español', pt: 'Português' };
+
+/** Translation table: English source text → translated text. A missing entry falls back to the English text. */
+export type Dict = Record<string, string>;
+export type Vars = Record<string, string | number>;
+
+/** Look up `key` (the English text) in `dict` and fill its {placeholders} from `vars`. */
+export function translate(dict: Dict | undefined, key: string, vars?: Vars): string {
+  const s = dict?.[key] ?? key;
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
+}
+
+/** Pick the supported language closest to a browser or Accept-Language value. */
+export function pickLang(value: string | null | undefined): Lang {
+  const v = (value ?? '').toLowerCase();
+  for (const part of v.split(',')) {
+    const code = part.trim().slice(0, 2);
+    if ((LANGS as readonly string[]).includes(code)) return code as Lang;
+  }
+  return 'en';
+}
+
+const UNITS: Record<Lang, { min: string; h: string; d: string; w: string; mo: string }> = {
+  en: { min: 'm', h: 'h', d: 'd', w: 'w', mo: 'mo' },
+  es: { min: 'min', h: 'h', d: 'd', w: 'sem', mo: 'mes' },
+  pt: { min: 'min', h: 'h', d: 'd', w: 'sem', mo: 'mês' },
+};
+
 // ───────────────────────── timeframes ─────────────────────────
 
 export const TIMEFRAMES = ['15m', '1h', '4h', '1d', '1w', '1M'] as const;
@@ -59,15 +91,16 @@ export const TF_INFO: Record<Timeframe, TimeframeInfo> = {
 };
 
 /** Human label for a number of bars on a timeframe, e.g. (15m, 16) → "4h", (1d, 30) → "30d". */
-export function durationLabel(tf: Timeframe, bars: number): string {
+export function durationLabel(tf: Timeframe, bars: number, lang: Lang = 'en'): string {
+  const u = UNITS[lang];
   const n = Math.round(bars * 10) / 10;
-  if (tf === '1M') return `${Math.round(n)}mo`;
-  if (tf === '1w') return `${Math.round(n)}w`;
+  if (tf === '1M') return `${Math.round(n)}${u.mo}`;
+  if (tf === '1w') return `${Math.round(n)}${u.w}`;
   const hours = (n * TF_INFO[tf].barSec) / 3600;
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  if (hours < 48 && hours % 24 !== 0) return `${Math.round(hours)}h`;
+  if (hours < 1) return `${Math.round(hours * 60)}${u.min}`;
+  if (hours < 48 && hours % 24 !== 0) return `${Math.round(hours)}${u.h}`;
   const days = hours / 24;
-  return `${Number.isInteger(days) ? days : days.toFixed(1)}d`;
+  return `${Number.isInteger(days) ? days : days.toFixed(1).replace('.', lang === 'en' ? '.' : ',')}${u.d}`;
 }
 
 /** Unix time (seconds) of the bar `k` bars after the bar that opens at `t`. */
@@ -110,6 +143,7 @@ export type MetricGroup =
   | 'derivatives'
   | 'sentiment'
   | 'liquidity'
+  | 'macro'
   | 'cycle';
 
 export const METRIC_GROUP_LABEL: Record<MetricGroup, string> = {
@@ -121,6 +155,7 @@ export const METRIC_GROUP_LABEL: Record<MetricGroup, string> = {
   derivatives: 'Derivatives',
   sentiment: 'Sentiment',
   liquidity: 'Liquidity',
+  macro: 'Macro',
   cycle: 'Cycle',
 };
 
@@ -368,6 +403,18 @@ export interface ForecastSettings {
    * 0 = analogs only, 1 = base rate only. Blending tames the noise of a small analog sample.
    */
   baseRateBlend: number;
+  /**
+   * Model internals, normally left unset so the tested defaults apply (see MODEL_DEFAULTS on the server).
+   * Exposed so the research bench can compare alternatives with the same walk-forward backtest.
+   */
+  distance?: 'euclidean' | 'mahalanobis';
+  /** Minimum spacing between analogs as a fraction of the horizon (on top of minGapBars). */
+  analogGapFraction?: number;
+  /** Kernel bandwidth: the furthest analog ('wide') or the median analog distance ('median'). */
+  kernel?: 'wide' | 'median';
+  /** 'adaptive' sets the base-rate weight from the evidence: κ / (independent analogs + κ). */
+  blendMode?: 'fixed' | 'adaptive';
+  blendKappa?: number;
 }
 
 export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = {
