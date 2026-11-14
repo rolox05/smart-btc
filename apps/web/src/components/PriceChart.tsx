@@ -115,6 +115,13 @@ function segmentLine(segs: AnnotationSegment[], color: string): LineData[] {
   return out;
 }
 
+/** USD volume in billions: $1.23B, or $0.045B on short bars, so every timeframe shares one unit. */
+function fmtVolB(usd: number): string {
+  const b = usd / 1e9;
+  const digits = b >= 100 ? 0 : b >= 10 ? 1 : b >= 1 ? 2 : b >= 0.1 ? 3 : 4;
+  return `$${b.toFixed(digits)}B`;
+}
+
 export function PriceChart({ candles, ticker, metrics, visible, series, forecast, liquidity, annotationDefs, annotationData, layers, tf, rangeBars, explain }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const refs = useRef<Refs | null>(null);
@@ -128,6 +135,16 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
   const tips = useRef({ series: new Map<unknown, Tip>(), objects: new Map<string, Tip>() });
   const explainRef = useRef(explain);
   explainRef.current = explain;
+  // Volume values, and the tallest bar in view: the left scale is only labelled up to it, so the
+  // billions axis covers the volume bars and stays out of the price area above them.
+  const volVals = useRef<number[]>([]);
+  const volTop = useRef(Infinity);
+  const updateVolTop = (from: number, to: number) => {
+    const v = volVals.current;
+    let m = 0;
+    for (let i = Math.max(0, Math.floor(from)); i <= Math.min(v.length - 1, Math.ceil(to)); i++) m = Math.max(m, v[i]);
+    volTop.current = m > 0 ? m : Infinity;
+  };
   const intraday = tf === '15m' || tf === '1h' || tf === '4h';
 
   const { overlays, panes } = useMemo(() => {
@@ -181,15 +198,25 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
     });
 
-    // Volume sits on its own hidden scale in the bottom fifth of the price pane, behind the candles' range.
+    // Volume sits in the bottom fifth of the price pane, behind the candles' range, with its own scale on
+    // the left labelled in billions of USD (as CoinMarketCap and Coinglass do).
     let volume: ISeriesApi<'Histogram'> | null = null;
     if (layers.volume) {
-      volume = chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false });
-      chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
+      volume = chart.addSeries(HistogramSeries, {
+        priceScaleId: 'left',
+        // Dollar volume, always expressed in billions so bars of every timeframe read on one scale.
+        priceFormat: { type: 'custom', formatter: (v: number) => (v > volTop.current * 1.02 ? '' : fmtVolB(v)), minMove: 0.0001 },
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: true, borderColor: UI.line });
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (range) updateVolTop(range.from, range.to);
+      });
     }
 
     const seriesTips = new Map<unknown, Tip>();
-    if (volume) seriesTips.set(volume, { title: t('Volume'), text: t('BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.') });
+    if (volume) seriesTips.set(volume, { title: t('Volume'), text: t('Dollar volume traded during the bar, in billions of USD. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.') });
     const objectTips = new Map<string, Tip>();
     const metricTip = (m: MetricDef): Tip => ({ title: m.name, text: [m.description, m.guide?.read[0]].filter(Boolean).join(' ') });
 
@@ -369,7 +396,12 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
     const r = refs.current;
     if (!r || candles.length === 0) return;
     r.candle.setData(candles.map((c) => ({ time: c.t as UTCTimestamp, open: c.o, high: c.h, low: c.l, close: c.c })));
-    r.volume?.setData(candles.map((c) => ({ time: c.t as UTCTimestamp, value: c.v, color: c.c >= c.o ? 'rgba(31,169,122,0.45)' : 'rgba(226,92,92,0.45)' })));
+    if (r.volume) {
+      volVals.current = candles.map((c) => c.v * c.c);
+      r.volume.setData(candles.map((c, i) => ({ time: c.t as UTCTimestamp, value: volVals.current[i], color: c.c >= c.o ? 'rgba(31,169,122,0.45)' : 'rgba(226,92,92,0.45)' })));
+      const range = r.chart.timeScale().getVisibleLogicalRange();
+      updateVolTop(range?.from ?? 0, range?.to ?? candles.length - 1);
+    }
   }, [candles, structureKey]);
 
   useEffect(() => {
@@ -598,7 +630,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
                 <span>H {fmtUsd(Math.max(bar.h, liveClose ?? bar.h))}</span>
                 <span>L {fmtUsd(Math.min(bar.l, liveClose ?? bar.l))}</span>
                 <span>C {fmtUsd(liveClose)}</span>
-                {layers.volume && <span>{t('Vol')} {bar.v >= 1000 ? `${(bar.v / 1000).toFixed(1)}K` : bar.v.toFixed(0)} BTC</span>}
+                {layers.volume && <span>{t('Vol')} {fmtVolB(bar.v * (liveClose ?? bar.c))}</span>}
                 {prev && liveClose != null && (
                   <span className={liveClose >= prev.c ? 'text-up' : 'text-down'}>{fmtPct((liveClose / prev.c - 1) * 100, 2)}</span>
                 )}

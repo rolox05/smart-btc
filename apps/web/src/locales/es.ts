@@ -455,7 +455,7 @@ const dict: Dict = {
   "Slow gauges (MVRV, drawdown from the high, halving cycle) describe the regime; fast ones (RSI, funding, divergences) describe timing inside it.": "Los indicadores lentos (MVRV, caída desde el máximo, ciclo del halving) describen el régimen; los rápidos (RSI, funding, divergencias) describen el timing dentro de él.",
   "Use the Ranking tab to see whether a combination actually held up out of sample before leaning on it.": "Usa la pestaña Ranking para ver si una combinación se sostuvo realmente fuera de muestra antes de apoyarte en ella.",
   "Volume": "Volumen",
-  "BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.": "BTC negociados durante la vela. Verde si la vela cerró por encima de su apertura, rojo si cerró por debajo. Los movimientos con mucho volumen tienen más convicción.",
+  "Dollar volume traded during the bar, in billions of USD. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.": "Volumen negociado durante la vela, en miles de millones de USD. Verde si la vela cerró por encima de su apertura, rojo si cerró por debajo. Los movimientos con mucho volumen tienen más convicción.",
   "Reference level for {name}.": "Nivel de referencia de {name}.",
   "Bullish": "Alcista",
   "Bearish": "Bajista",

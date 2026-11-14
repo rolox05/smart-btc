@@ -481,7 +481,7 @@ T = {
 
     # ── chart labels and hover explanations ──
     'Volume': ('Volumen', 'Volume'),
-    'BTC traded during the bar. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.': ('BTC negociados durante la vela. Verde si la vela cerró por encima de su apertura, rojo si cerró por debajo. Los movimientos con mucho volumen tienen más convicción.', 'BTC negociados durante a barra. Verde quando a barra fechou acima da abertura, vermelho quando abaixo. Movimentos com volume alto têm mais convicção.'),
+    'Dollar volume traded during the bar, in billions of USD. Green when the bar closed higher than it opened, red when lower. Moves on high volume carry more conviction.': ('Volumen negociado durante la vela, en miles de millones de USD. Verde si la vela cerró por encima de su apertura, rojo si cerró por debajo. Los movimientos con mucho volumen tienen más convicción.', 'Volume negociado durante a barra, em bilhões de USD. Verde quando a barra fechou acima da abertura, vermelho quando abaixo. Movimentos com volume alto têm mais convicção.'),
     'Reference level for {name}.': ('Nivel de referencia de {name}.', 'Nível de referência de {name}.'),
     'Bullish': ('Alcista', 'Altista'),
     'Bearish': ('Bajista', 'Baixista'),
