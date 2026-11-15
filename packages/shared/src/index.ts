@@ -405,6 +405,12 @@ export interface LiquidationFeed {
   profile: { price: number; longUsd: number; shortUsd: number }[];
 }
 
+/** Events pushed over GET /api/stream (Server-Sent Events), by event name. */
+export interface LiveEvents {
+  ticker: Ticker;
+  liquidations: LiquidationPrint[];
+}
+
 // ───────────────────────── forecast ─────────────────────────
 
 export interface ForecastSettings {

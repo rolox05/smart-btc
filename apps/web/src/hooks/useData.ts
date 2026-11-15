@@ -9,8 +9,9 @@ const retryDelay = 1500;
 export const useOverview = (tf: Timeframe) =>
   useQuery({ queryKey: ['overview', tf], queryFn: () => api.overview(tf), refetchInterval: 60_000, placeholderData: keepPreviousData, retry, retryDelay });
 
-export const useTicker = () =>
-  useQuery({ queryKey: ['ticker'], queryFn: api.ticker, refetchInterval: 5_000, retry, retryDelay });
+/** `pushed`: the live stream is delivering prices, so polling is only a slow safety net. */
+export const useTicker = (pushed: boolean) =>
+  useQuery({ queryKey: ['ticker'], queryFn: api.ticker, refetchInterval: pushed ? false : 5_000, retry, retryDelay });
 
 export const useCandles = (tf: Timeframe) =>
   useQuery({ queryKey: ['candles', tf], queryFn: () => api.candles(tf), refetchInterval: tf === '15m' || tf === '1h' ? 60_000 : 120_000, retry, retryDelay });
@@ -88,14 +89,15 @@ export const useModels = (settings: ForecastSettings, enabled: boolean, dataVers
 export const useEvents = (enabled: boolean) =>
   useQuery({ queryKey: ['events'], queryFn: api.events, enabled, staleTime: 15 * 60_000, refetchInterval: 15 * 60_000, retry, retryDelay });
 
-export const useLiveLiquidations = (enabled: boolean) =>
-  useQuery({ queryKey: ['liquidations'], queryFn: api.liquidations, enabled, refetchInterval: 15_000, retry, retryDelay });
+/** `pushed`: the live stream refreshes this on every print; the slow poll only rolls the time windows forward. */
+export const useLiveLiquidations = (enabled: boolean, pushed: boolean) =>
+  useQuery({ queryKey: ['liquidations'], queryFn: api.liquidations, enabled, refetchInterval: pushed ? 60_000 : 15_000, retry, retryDelay });
 
-export const useBacktest = (req: BacktestRequest, dataVersion: number | undefined) =>
+export const useBacktest = (req: BacktestRequest, enabled: boolean, dataVersion: number | undefined) =>
   useQuery({
     queryKey: ['backtest', req, dataVersion],
     queryFn: () => api.backtest(req),
-    enabled: req.settings.features.length > 0,
+    enabled: enabled && req.settings.features.length > 0,
     placeholderData: keepPreviousData,
     staleTime: 10 * 60_000,
     retry,

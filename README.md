@@ -118,6 +118,10 @@ range only as much as past event days were riskier than ordinary ones.
 Live liquidations arrive over the Binance and Bybit websockets and are stored locally from the
 moment the server first runs (Liquidity tab); neither exchange offers an archive.
 
+The exchange connections live on the server, so they keep collecting with no browser open. The browser
+listens to a single Server-Sent Events stream (`GET /api/stream`) for the price (Binance spot ticker,
+about once per second) and each liquidation, and only falls back to polling if that stream goes quiet.
+
 ## Data sources
 
 | Source | Used for | Notes |

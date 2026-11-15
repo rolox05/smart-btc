@@ -22,6 +22,8 @@ import { eventData, eventOverlay, eventsReport } from './analytics/events.js';
 import { PreparedCache } from './forecast/analog.js';
 import { runModels } from './forecast/models.js';
 import { type LiquidationStream, liquidationFeed } from './providers/liquidationStream.js';
+import type { PriceStream } from './providers/priceStream.js';
+import { registerLiveStream } from './liveStream.js';
 import type { Store } from './store/store.js';
 import { runBacktest } from './forecast/backtest.js';
 import { ForecastError, runForecast } from './forecast/forecast.js';
@@ -88,7 +90,7 @@ export function registerRoutes(
   app: FastifyInstance,
   datasets: DatasetService,
   sync: SyncService,
-  live: { store: Store; liquidations: LiquidationStream },
+  live: { store: Store; liquidations: LiquidationStream; prices: PriceStream },
 ) {
   const prepared = new PreparedCache();
   const results = new ResultCache();
@@ -184,6 +186,8 @@ export function registerRoutes(
     };
   });
   app.get('/api/ticker', async (req): Promise<Ticker> => {
+    const pushed = live.prices.latest();
+    if (pushed) return pushed;
     try {
       return await loadTicker();
     } catch {
@@ -206,6 +210,8 @@ export function registerRoutes(
     const t = trOf(req);
     return liquidityReport(await dataset('1d', t), t);
   });
+
+  registerLiveStream(app, live);
 
   // Liquidations received over the exchange websockets and stored locally.
   app.get('/api/liquidations', async () => {

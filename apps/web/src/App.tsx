@@ -2,24 +2,14 @@ import { TF_INFO, type AnnotationPayload, type ForecastSettings, type RelationWi
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { type CSSProperties, useMemo, useState } from 'react';
-import { BacktestPanel } from './components/BacktestPanel';
-import { DataPanel } from './components/DataPanel';
+import { type CSSProperties, Suspense, lazy, useMemo, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { EventsPanel } from './components/EventsPanel';
-import { LiveLiquidations } from './components/LiveLiquidations';
-import { ModelsPanel } from './components/ModelsPanel';
 import { ForecastPanel, ForecastSettingsBar } from './components/ForecastPanel';
-import { GuidePanel, type GuideSection } from './components/GuidePanel';
+import type { GuideSection } from './components/GuidePanel';
 import { Header } from './components/Header';
-import { LiquidationHeatmapView } from './components/LiquidationHeatmap';
-import { LiquidityPanel } from './components/LiquidityPanel';
 import { MetricSidebar } from './components/MetricSidebar';
-import { OddsPanel } from './components/OddsPanel';
 import { PriceChart } from './components/PriceChart';
-import { RankingPanel } from './components/RankingPanel';
 import { ResizeHandle } from './components/ResizeHandle';
-import { TradePanel } from './components/TradePanel';
 import { Async, Loading, Note, Segmented } from './components/ui';
 import {
   useAnnotations,
@@ -40,6 +30,20 @@ import {
 import { api } from './lib/api';
 import { LangProvider, setLang, useT } from './lib/i18n';
 import { type TabId, useAppState, useDebounced, useSelections } from './lib/state';
+import { useLiveStream } from './hooks/useLiveStream';
+
+// Everything outside the first screen (chart + forecast) is loaded when its tab or view is first opened.
+const BacktestPanel = lazy(() => import('./components/BacktestPanel').then((m) => ({ default: m.BacktestPanel })));
+const DataPanel = lazy(() => import('./components/DataPanel').then((m) => ({ default: m.DataPanel })));
+const EventsPanel = lazy(() => import('./components/EventsPanel').then((m) => ({ default: m.EventsPanel })));
+const GuidePanel = lazy(() => import('./components/GuidePanel').then((m) => ({ default: m.GuidePanel })));
+const LiquidationHeatmapView = lazy(() => import('./components/LiquidationHeatmap').then((m) => ({ default: m.LiquidationHeatmapView })));
+const LiquidityPanel = lazy(() => import('./components/LiquidityPanel').then((m) => ({ default: m.LiquidityPanel })));
+const LiveLiquidations = lazy(() => import('./components/LiveLiquidations').then((m) => ({ default: m.LiveLiquidations })));
+const ModelsPanel = lazy(() => import('./components/ModelsPanel').then((m) => ({ default: m.ModelsPanel })));
+const OddsPanel = lazy(() => import('./components/OddsPanel').then((m) => ({ default: m.OddsPanel })));
+const RankingPanel = lazy(() => import('./components/RankingPanel').then((m) => ({ default: m.RankingPanel })));
+const TradePanel = lazy(() => import('./components/TradePanel').then((m) => ({ default: m.TradePanel })));
 
 // The Data tab stays reachable from the source-status button in the header.
 /**
@@ -101,7 +105,8 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const horizon = tfInfo.horizons.includes(state.settings.horizon) ? state.settings.horizon : tfInfo.defaultHorizon;
 
   const overview = useOverview(tf);
-  const ticker = useTicker();
+  const live = useLiveStream();
+  const ticker = useTicker(live.pushed);
   const candles = useCandles(tf);
   const metrics = overview.data?.metrics;
   const { visible, model } = useSelections(state, metrics);
@@ -127,7 +132,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const barVersion = fresh?.asOf;
   const forecast = useForecast(settings, priceVersion);
   const backtestReq = useDebounced(useMemo(() => ({ settings, ...state.backtest }), [settings, state.backtest]), 350);
-  const backtest = useBacktest(backtestReq, barVersion);
+  const backtest = useBacktest(backtestReq, state.tab === 'forecast' || state.tab === 'backtest', barVersion);
   const wantLiquidity = state.layers.swings || state.layers.liquidations || state.layers.walls || state.tab === 'liquidity';
   const liquidity = useLiquidity(wantLiquidity);
   const heatmap = useLiquidationHeatmap(state.heatmapWindow, state.center === 'heatmap');
@@ -135,7 +140,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const trade = useTradeSetup(tradeReq, state.tab === 'trade', priceVersion);
   const models = useModels(settings, state.tab === 'models', barVersion);
   const events = useEvents(state.tab === 'events');
-  const liveLiquidations = useLiveLiquidations(state.tab === 'liquidity');
+  const liveLiquidations = useLiveLiquidations(state.tab === 'liquidity', live.pushed);
 
   // Chart annotations (e.g. RSI divergences) that are switched on and known to the server.
   const annotationDefs = useMemo(
@@ -326,6 +331,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
               )}
             </header>
             <ErrorBoundary {...boundary} resetKey={`${state.center}:${tf}:${state.heatmapWindow}`}>
+            <Suspense fallback={<div className="px-3"><Loading /></div>}>
             {state.center === 'heatmap' ? (
               heatmap.data ? (
                 <LiquidationHeatmapView heatmap={heatmap.data} window={state.heatmapWindow} onWindow={(heatmapWindow) => patch({ heatmapWindow })} loading={heatmap.isFetching && heatmap.data.window !== state.heatmapWindow} />
@@ -366,6 +372,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             )}
             </>
             )}
+            </Suspense>
             </ErrorBoundary>
           </section>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-mute">
@@ -411,6 +418,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
           </div>
 
           <ErrorBoundary {...boundary} resetKey={`${state.tab}:${tf}`}>
+          <Suspense fallback={<Loading />}>
           {noInputs && !['liquidity', 'data', 'guide', 'models', 'events'].includes(state.tab) ? (
             <Note tone="warn">{t('No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.')}</Note>
           ) : (
@@ -476,6 +484,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             />
           )}
           {state.tab === 'data' && <DataPanel overview={ov} onRefresh={() => refresh.mutate()} refreshing={refresh.isPending} />}
+          </Suspense>
           </ErrorBoundary>
         </div>
         </div>
