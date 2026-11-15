@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { eventOverlay, eventStudy, parseFomcCalendar } from '../src/analytics/events.js';
 import { prepare } from '../src/forecast/analog.js';
-import { fitQuantile, fitRidge, gridDist, runModels, sampleDist } from '../src/forecast/models.js';
+import { METRICS } from '../src/analytics/metrics.js';
+import { DATASET_INPUTS, fitQuantile, fitRidge, gridDist, runModels, sampleDist } from '../src/forecast/models.js';
 import { FEEDS } from '../src/providers/liquidationStream.js';
 import { rng, settings, syntheticDataset } from './synthetic.js';
 
@@ -156,4 +157,18 @@ test('liquidation feeds: exchange messages are read with the right side and size
   const [y] = bybit.parse({ topic: 'allLiquidation.BTCUSDT', data: [{ T: 1700000000001, s: 'BTCUSDT', S: 'Sell', v: '2', p: '65000' }] });
   assert.deepEqual(y, { t: 1700000000001, venue: 'Bybit', side: 'short', price: 65000, usd: 130000 });
   assert.deepEqual(bybit.parse({ op: 'pong' }), []);
+});
+
+test('ETF flows and volume are context only: no model can read them', () => {
+  // Whole word only: "exchNetflow" (exchange netflow, on-chain) is not an ETF metric.
+  const isEtf = (text: string) => /\betf\b|ibit/i.test(text.replace(/([a-z])([A-Z])/g, '$1 $2'));
+  // The regressions' input list has no ETF series.
+  assert.deepEqual(DATASET_INPUTS.filter(isEtf), []);
+  // No ETF metric can be switched on as an input of the analog model.
+  for (const m of METRICS) {
+    if (isEtf(m.id) || isEtf(m.name)) assert.equal(m.forecastable, false, `${m.id} must not be a model input`);
+  }
+  // The event overlay only knows Fed, inflation and expiry events.
+  const o = eventOverlay([{ kind: 'expiry', t: 1_800_000_000 + 86_400, title: '', detail: '', estimated: false }], [], 1_800_000_000, 30);
+  assert.equal(o.spreadMultiplier, 1);
 });

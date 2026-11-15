@@ -188,6 +188,7 @@ const dict: Dict = {
   "Weighs momentum, volatility, sentiment and macro inputs to estimate each quantile of the outcome directly.": "Pondera momentum, volatilidad, sentimiento y entradas macro para estimar directamente cada cuantil del resultado.",
   "{btc} BTC of open interest (about ${usd}B) settles on Deribit at 08:00 UTC; max pain {pain}.": "{btc} BTC de interés abierto (unos ${usd} mil M) se liquidan en Deribit a las 08:00 UTC; max pain {pain}.",
   "{n} scheduled events fall inside the horizon, so the consensus range is widened by {pct}%.": "{n} eventos programados caen dentro del horizonte, así que el rango de consenso se amplía un {pct}%.",
+  "ETF activity is context only. No model in this app reads it: ETF buyers tend to pile in after rallies and sell after drops (FOMO and FUD), so inflows are not treated as a buy signal nor outflows as a sell signal.": "La actividad de los ETF es solo contexto. Ningún modelo de esta app la lee: los compradores de ETF suelen entrar después de las subidas y vender después de las caídas (FOMO y FUD), así que las entradas no se tratan como señal de compra ni las salidas como señal de venta.",
   "BTC/USDT daily candles since 2017, live price": "Velas diarias BTC/USDT desde 2017, precio en vivo",
   "BTC/USD daily candles since 2011 (long history, fallback price feed)": "Velas diarias BTC/USD desde 2011 (historial largo, precio de respaldo)",
   "BTC/USDT {interval} candles ({span}) for the {interval} timeframe": "Velas BTC/USDT de {interval} ({span}) para la temporalidad de {interval}",

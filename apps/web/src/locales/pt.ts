@@ -428,6 +428,7 @@ const dict: Dict = {
   "{month}: {yoy}% over a year, {mom}% over the month": "{month}: {yoy}% em um ano, {mom}% no mês",
   "{n} scheduled events fall inside the horizon; on past ones Bitcoin moved about as much as on ordinary days, so the range is not widened.": "{n} eventos programados caem dentro do horizonte; nos anteriores o Bitcoin se moveu mais ou menos como em um dia comum, então a faixa não é ampliada.",
   "{x}× average": "{x}× a média",
+  "Shown for context, not used as a signal: heavy ETF buying has followed rallies and heavy selling has followed drops, so neither is read as a reason to buy or sell.": "Mostrado como contexto, não usado como sinal: compras fortes de ETF vieram depois de altas e vendas fortes depois de quedas, então nenhuma é lida como motivo para comprar ou vender.",
   "Est. liquidations": "Liquidações est.",
   "Try again": "Tentar novamente",
   "This panel could not be displayed": "Não foi possível exibir este painel",

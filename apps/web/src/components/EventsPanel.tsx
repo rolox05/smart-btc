@@ -135,6 +135,9 @@ export function EventsPanel({ report }: { report: EventsReport }) {
               <div key={p.t} className="min-w-0 flex-1 rounded-sm" title={`${fmtDay(p.t)}: ${fmtCompactUsd(p.usd)}`} style={{ height: `${Math.max(2, (p.usd / maxEtf) * 56)}px`, background: p.usd > (report.etf?.avg30Usd ?? 0) * 1.5 ? UI.warn : UI.accent, opacity: 0.85 }} />
             ))}
           </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-mute">
+            {t('Shown for context, not used as a signal: heavy ETF buying has followed rallies and heavy selling has followed drops, so neither is read as a reason to buy or sell.')}
+          </p>
         </Card>
       )}
 

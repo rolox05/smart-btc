@@ -103,6 +103,14 @@ interface FeatureDef {
   trend: boolean;
 }
 
+/**
+ * Dataset series the regressions may read, besides the price-based inputs built below.
+ * Spot-ETF flows and volume are deliberately absent, and must stay absent: ETF buyers chase rallies
+ * and sell into drops (FOMO and FUD), so an inflow is not a buy signal and an outflow is not a sell
+ * signal. ETF activity is shown as context in the Events tab only. A test enforces this.
+ */
+export const DATASET_INPUTS = ['rsi14', 'ddAth', 'funding', 'dxy', 'us10y', 'nasdaqMom', 'fng'] as const;
+
 const featureCache = new WeakMap<Dataset, { cols: Map<string, Float64Array> }>();
 
 /** Model inputs known at the close of each bar. Price-based ones are built here; the rest come from the dataset. */
@@ -122,7 +130,7 @@ function featureColumns(ds: Dataset) {
   const regime = new Float64Array(n).fill(NaN);
   for (let i = 0; i < n; i++) if (ewma[i] > 0 && long[i] > 0) regime[i] = 0.5 * Math.log(ewma[i] / long[i]);
   cols.set('volRegime', regime);
-  for (const id of ['rsi14', 'ddAth', 'funding', 'dxy', 'us10y', 'nasdaqMom', 'fng']) {
+  for (const id of DATASET_INPUTS) {
     const col = ds.features.get(id);
     if (col) cols.set(id, col);
   }

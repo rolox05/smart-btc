@@ -11,7 +11,9 @@ import type { Dataset } from './dataset.js';
  *  - Fed decisions      dates read from federalreserve.gov (the FOMC calendar)
  *  - US inflation (CPI) values from the BLS public API; past release dates from the BLS schedule
  *  - Option expiries    open interest per expiry from Deribit's public API
- *  - Spot ETF activity  dollar volume of the largest spot ETF (no free source publishes net flows)
+ *  - Spot ETF activity  dollar volume of the largest spot ETF (no free source publishes net flows).
+ *                       Context only: it never feeds a model or the event overlay, because ETF buyers
+ *                       and sellers react to price (FOMO and FUD) rather than lead it.
  *
  * Each kind of event gets an event study on the daily history: how large the move was on those days
  * compared with ordinary days, after dividing by the volatility of the time. That ratio is what the
@@ -324,6 +326,7 @@ export async function eventsReport(daily: Dataset, store: Store, t: T = EN): Pro
   const notes = [
     t('Event studies compare the daily move on past event days with all other days since 2021, after dividing each move by the volatility of the time. A variance ratio of 2 means an event day carried two ordinary days of risk.'),
     t('No free source publishes daily net flows of the spot ETFs, so the panel shows the dollar volume of the largest one (IBIT) as an activity gauge: heavy volume means institutions are active, not which way they are trading.'),
+    t('ETF activity is context only. No model in this app reads it: ETF buyers tend to pile in after rallies and sell after drops (FOMO and FUD), so inflows are not treated as a buy signal nor outflows as a sell signal.'),
   ];
   if (!data.fomcLive) notes.push(t('The Fed calendar could not be read just now; meeting dates come from the built-in schedule.'));
   if (!inflation.length) notes.push(t('Inflation figures could not be loaded from the BLS just now.'));
