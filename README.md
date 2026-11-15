@@ -101,6 +101,23 @@ backtest for several variants (distance, kernel, analog spacing, adaptive blendi
 and 90 days. Only variants that won consistently are defaults; picking them on the same history is
 still mild over-fitting, so treat small skill differences as noise.
 
+## Three models and a consensus (Models tab)
+
+| Model | What it does | Basis |
+|---|---|---|
+| Historical analogs | Finds the past days most similar to today on the inputs you chose | The app's original model |
+| Quantile regression | Estimates each quantile of the outcome as a weighted sum of momentum, volatility, sentiment and macro inputs, and shows the weight of each | Koenker & Bassett (1978) |
+| Trend + volatility | A small momentum tilt on top of past returns standardised by a GARCH-style volatility forecast | Moskowitz, Ooi & Pedersen (2012); Liu & Tsyvinski (2021); Barone-Adesi et al. (1999) |
+
+All three are scored on the same past dates with only the data available on each date, and their
+equal-weight consensus is scored too. On this history neither new model beats the base rate on its
+own; the consensus matches or improves on the analog model's range quality. Scheduled events inside
+the horizon (Events tab: Fed decisions, CPI releases, monthly option expiries) widen the consensus
+range only as much as past event days were riskier than ordinary ones.
+
+Live liquidations arrive over the Binance and Bybit websockets and are stored locally from the
+moment the server first runs (Liquidity tab); neither exchange offers an archive.
+
 ## Data sources
 
 | Source | Used for | Notes |

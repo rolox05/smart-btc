@@ -29,7 +29,7 @@ const LABEL_FIELDS = {
  * or that stay the same in every language (data-source brand names).
  */
 const IGNORE = new Set([
-  ', ', '; ', 'en-US', 'buy-side', 'rally', 'bullish', 'bearish', 'neutral', 'num text-ink', 'num text-ink2',
+  ', ', '; ', 'en-US', 'numeric', 'buy-side', 'rally', 'bullish', 'bearish', 'neutral', 'num text-ink', 'num text-ink2',
   'cone', 'swings', 'targets', 'walls', 'liquidations',
   'Binance', 'BGeometrics', 'Coin Metrics', 'DefiLlama', 'Deribit', 'alternative.me', 'Bybit', 'Hyperliquid', 'Yahoo Finance', 'CFTC',
 ]);

@@ -73,6 +73,24 @@ export const useForecast = (settings: ForecastSettings, dataVersion: number | un
     retryDelay,
   });
 
+/** The model comparison only needs inputs for the analog model; the other two bring their own. */
+export const useModels = (settings: ForecastSettings, enabled: boolean, dataVersion: number | undefined) =>
+  useQuery({
+    queryKey: ['models', settings, dataVersion],
+    queryFn: () => api.models(settings),
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 10 * 60_000,
+    retry,
+    retryDelay,
+  });
+
+export const useEvents = (enabled: boolean) =>
+  useQuery({ queryKey: ['events'], queryFn: api.events, enabled, staleTime: 15 * 60_000, refetchInterval: 15 * 60_000, retry, retryDelay });
+
+export const useLiveLiquidations = (enabled: boolean) =>
+  useQuery({ queryKey: ['liquidations'], queryFn: api.liquidations, enabled, refetchInterval: 15_000, retry, retryDelay });
+
 export const useBacktest = (req: BacktestRequest, dataVersion: number | undefined) =>
   useQuery({
     queryKey: ['backtest', req, dataVersion],

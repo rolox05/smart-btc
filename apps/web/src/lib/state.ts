@@ -1,7 +1,7 @@
 import { DEFAULT_FORECAST_SETTINGS, pickLang, type ForecastSettings, type HeatmapWindow, type Lang, type MetricDef } from '@smart-btc/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-export type TabId = 'forecast' | 'odds' | 'trade' | 'backtest' | 'ranking' | 'liquidity' | 'guide' | 'data';
+export type TabId = 'forecast' | 'models' | 'events' | 'odds' | 'trade' | 'backtest' | 'ranking' | 'liquidity' | 'guide' | 'data';
 
 export interface Layers {
   cone: boolean;

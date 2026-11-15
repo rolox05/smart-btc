@@ -18,7 +18,11 @@ import { HEATMAP_TIMEFRAME, liquidationHeatmap } from './analytics/liquidationHe
 import { liquidityReport } from './analytics/liquidity.js';
 import { metricsFor } from './analytics/metrics.js';
 import { buildRelations } from './analytics/relations.js';
+import { eventData, eventOverlay, eventsReport } from './analytics/events.js';
 import { PreparedCache } from './forecast/analog.js';
+import { runModels } from './forecast/models.js';
+import { type LiquidationStream, liquidationFeed } from './providers/liquidationStream.js';
+import type { Store } from './store/store.js';
 import { runBacktest } from './forecast/backtest.js';
 import { ForecastError, runForecast } from './forecast/forecast.js';
 import { runTradeSetup } from './forecast/tradeSetup.js';
@@ -80,7 +84,12 @@ class ResultCache {
   }
 }
 
-export function registerRoutes(app: FastifyInstance, datasets: DatasetService, sync: SyncService) {
+export function registerRoutes(
+  app: FastifyInstance,
+  datasets: DatasetService,
+  sync: SyncService,
+  live: { store: Store; liquidations: LiquidationStream },
+) {
   const prepared = new PreparedCache();
   const results = new ResultCache();
 
@@ -198,6 +207,12 @@ export function registerRoutes(app: FastifyInstance, datasets: DatasetService, s
     return liquidityReport(await dataset('1d', t), t);
   });
 
+  // Liquidations received over the exchange websockets and stored locally.
+  app.get('/api/liquidations', async () => {
+    const ds = await dataset('1d');
+    return liquidationFeed(live.store, live.liquidations, ds.c[ds.n - 1]);
+  });
+
   app.get('/api/liquidation-heatmap', async (req) => {
     const { window } = z.object({ window: z.enum(HEATMAP_WINDOWS).default('2w') }).parse(req.query);
     const t = trOf(req);
@@ -241,6 +256,25 @@ export function registerRoutes(app: FastifyInstance, datasets: DatasetService, s
     const ds = await dataset(settings.timeframe, t);
     return results.get(`f:${t.lang}:${ds.version}:${JSON.stringify(settings)}`, () =>
       runForecast(ds, prepared.get(ds, settings.horizon), settings, t),
+    );
+  });
+
+  // Calendar of scheduled events, how Bitcoin behaved on past ones, option expiries and ETF activity.
+  app.get('/api/events', async (req) => {
+    const t = trOf(req);
+    return eventsReport(await dataset('1d', t), live.store, t);
+  });
+
+  // The three models side by side, with the consensus widened for events inside the horizon.
+  app.post('/api/models', async (req) => {
+    const settings = settingsSchema.parse(req.body);
+    const t = trOf(req);
+    const ds = await dataset(settings.timeframe, t);
+    const daily = await dataset('1d', t);
+    const events = await eventData(daily, t);
+    const overlay = eventOverlay(events.upcoming, events.studies, Math.floor(Date.now() / 1000), settings.horizon * ds.barDays);
+    return results.get(`m:${t.lang}:${stamp(ds)}:${JSON.stringify(settings)}:${overlay.spreadMultiplier.toFixed(3)}`, () =>
+      runModels(ds, prepared.get(ds, settings.horizon), settings, overlay, t),
     );
   });
 

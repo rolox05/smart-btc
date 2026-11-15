@@ -382,6 +382,29 @@ export interface LiquidationHeatmap {
   notes: string[];
 }
 
+/** One forced liquidation reported by an exchange websocket. */
+export interface LiquidationPrint {
+  /** Unix milliseconds. */
+  t: number;
+  venue: 'Binance' | 'Bybit';
+  /** Side of the position that was force-closed. */
+  side: 'long' | 'short';
+  price: number;
+  usd: number;
+}
+
+/** Live liquidations collected locally from the exchange websockets. */
+export interface LiquidationFeed {
+  at: number;
+  /** Time of the first stored print (ms): the history only goes back to when the collector first ran. */
+  since: number | null;
+  venues: { venue: string; connected: boolean; lastEventAt: number | null; events: number; error: string | null }[];
+  totals: { window: '1h' | '4h' | '24h'; longUsd: number; shortUsd: number; count: number }[];
+  largest: LiquidationPrint[];
+  /** Price levels with the most liquidations in the last 24 hours. */
+  profile: { price: number; longUsd: number; shortUsd: number }[];
+}
+
 // ───────────────────────── forecast ─────────────────────────
 
 export interface ForecastSettings {
@@ -766,6 +789,142 @@ export interface TradeSetupResult {
   /** Horizon in bars. */
   horizon: number;
   effectiveN: number;
+}
+
+// ───────────────────────── model comparison ─────────────────────────
+
+export type ForecastModelId = 'analog' | 'quantile' | 'trend' | 'ensemble';
+
+/** One model's view of the next `horizon` bars, with its own walk-forward record. */
+export interface ModelOutlook {
+  id: ForecastModelId;
+  name: string;
+  description: string;
+  available: boolean;
+  /** Why the model could not run (e.g. no inputs selected for the analog model). */
+  reason?: string;
+  pUp: number;
+  pRally: number;
+  pRange: number;
+  pDecline: number;
+  /** Return quantiles at the horizon, in %. */
+  q10: number;
+  q25: number;
+  q50: number;
+  q75: number;
+  q90: number;
+  /** Walk-forward scores against the base rate known on each date; null when it could not be tested. */
+  skill: {
+    /** Brier skill per event and their average (> 0 beats the base rate). */
+    up: number;
+    rally: number;
+    decline: number;
+    avg: number;
+    /** Pinball-loss skill of the whole distribution (> 0 beats the base rate). */
+    quantile: number;
+    /** Share of outcomes inside the 80% and the 50% band. */
+    coverage80: number;
+    coverage50: number;
+  } | null;
+}
+
+/** How much one input moves a model's forecast right now. */
+export interface ModelWeight {
+  id: string;
+  name: string;
+  /** Current reading in standard deviations from its own history. */
+  z: number | null;
+  /** Effect of one standard deviation of the input on the 10% / 50% / 90% quantile, in % of price. */
+  low: number;
+  median: number;
+  high: number;
+  /** Current contribution to the median forecast, in % of price. */
+  contribution: number;
+}
+
+/** Scheduled events inside the forecast horizon and how much they widen the range. */
+export interface EventOverlay {
+  /** Factor applied to the spread of the consensus distribution (1 = no event inside the horizon). */
+  spreadMultiplier: number;
+  events: { kind: MarketEventKind; t: number; title: string; varianceRatio: number }[];
+}
+
+export interface ModelsReport {
+  timeframe: Timeframe;
+  horizon: number;
+  thresholdPct: number;
+  price: number;
+  asOf: number;
+  evaluations: number;
+  from: number;
+  to: number;
+  models: ModelOutlook[];
+  /** Input weights of the quantile regression. */
+  weights: ModelWeight[];
+  overlay: EventOverlay;
+  /** Consensus after widening for scheduled events. */
+  adjusted: { q10: number; q25: number; q50: number; q75: number; q90: number; pRally: number; pDecline: number; pRange: number };
+  agreement: 'bullish' | 'bearish' | 'mixed';
+  notes: string[];
+}
+
+// ───────────────────────── events ─────────────────────────
+
+export type MarketEventKind = 'fomc' | 'cpi' | 'expiry';
+
+export interface MarketEvent {
+  kind: MarketEventKind;
+  /** Unix seconds (start of the UTC day of the event). */
+  t: number;
+  title: string;
+  detail: string;
+  /** True when the date is derived from a rule instead of an official calendar. */
+  estimated: boolean;
+}
+
+/** How Bitcoin has behaved on past days of one kind of event. */
+export interface EventStudy {
+  kind: MarketEventKind;
+  name: string;
+  /** Number of past event days measured. */
+  n: number;
+  /** Mean absolute daily move on event days and on all other days, in %. */
+  avgAbsMovePct: number;
+  normalAbsMovePct: number;
+  /** Variance of volatility-adjusted returns on event days relative to other days. */
+  varianceRatio: number;
+  /** Share of event days that closed higher. */
+  upShare: number;
+}
+
+export interface OptionExpiry {
+  t: number;
+  label: string;
+  /** Open interest in BTC and its notional in USD. */
+  openInterestBtc: number;
+  notionalUsd: number;
+  putCallRatio: number;
+  /** Strike at which option holders lose the most in aggregate. */
+  maxPain: number;
+  monthly: boolean;
+}
+
+export interface EventsReport {
+  at: number;
+  upcoming: MarketEvent[];
+  studies: EventStudy[];
+  expiries: OptionExpiry[];
+  inflation: { month: string; yoyPct: number; momPct: number }[];
+  /** Fed funds context is not fetched; the calendar comes from federalreserve.gov. */
+  etf: {
+    /** Daily dollar volume of the largest spot ETF, the activity proxy used in place of net flows. */
+    series: { t: number; usd: number }[];
+    avg30Usd: number;
+    lastUsd: number;
+    /** Latest day relative to the 30-day average. */
+    ratio: number;
+  } | null;
+  notes: string[];
 }
 
 // ───────────────────────── overview ─────────────────────────

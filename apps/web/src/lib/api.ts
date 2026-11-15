@@ -1,6 +1,9 @@
 import { getLang, tr } from './i18n';
 import type {
+  EventsReport,
   HeatmapWindow,
+  LiquidationFeed,
+  ModelsReport,
   LiquidationHeatmap,
   AnnotationPayload,
   RelationWindow,
@@ -62,5 +65,8 @@ export const api = {
   backtest: (r: BacktestRequest) => call<BacktestResult>('/api/backtest', r),
   backtestSummary: (r: BacktestRequest) => call<BacktestSummary>('/api/backtest/summary', r),
   tradeSetup: (r: TradeSetupRequest) => call<TradeSetupResult>('/api/trade-setup', r),
+  models: (s: ForecastSettings) => call<ModelsReport>('/api/models', s),
+  events: () => call<EventsReport>('/api/events'),
+  liquidations: () => call<LiquidationFeed>('/api/liquidations'),
   refresh: () => call<SourceStatus[]>('/api/refresh', {}),
 };

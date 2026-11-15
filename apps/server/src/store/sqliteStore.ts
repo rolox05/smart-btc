@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { Candle } from '@smart-btc/shared';
+import type { Candle, LiquidationPrint } from '@smart-btc/shared';
 import type { Point, Store, SyncState } from './store.js';
 
 // node:sqlite is loaded through require so that bundlers/transpilers never rewrite the specifier.
@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS points (
   series TEXT NOT NULL, t INTEGER NOT NULL, v REAL NOT NULL,
   PRIMARY KEY (series, t)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS liquidations (
+  t INTEGER NOT NULL, venue TEXT NOT NULL, side TEXT NOT NULL, price REAL NOT NULL, usd REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS liquidations_t ON liquidations (t);
 CREATE TABLE IF NOT EXISTS sync_state (
   provider TEXT PRIMARY KEY, last_ok INTEGER, last_attempt INTEGER,
   status TEXT NOT NULL, message TEXT NOT NULL, rows INTEGER NOT NULL
@@ -45,6 +49,9 @@ export function openSqliteStore(dataDir: string): Store {
   const selPoints = db.prepare('SELECT t, v FROM points WHERE series = ? AND t >= ? ORDER BY t');
   const selLastPoint = db.prepare('SELECT MAX(t) AS t FROM points WHERE series = ?');
   const cntPoints = db.prepare("SELECT COUNT(*) AS n FROM points WHERE series LIKE ? || '%'");
+  const insLiq = db.prepare('INSERT INTO liquidations (t, venue, side, price, usd) VALUES (?, ?, ?, ?, ?)');
+  const selLiq = db.prepare('SELECT t, venue, side, price, usd FROM liquidations WHERE t >= ? ORDER BY t');
+  const selFirstLiq = db.prepare('SELECT MIN(t) AS t FROM liquidations');
   const selSync = db.prepare('SELECT provider, last_ok, last_attempt, status, message, rows FROM sync_state');
   const upSync = db.prepare(
     `INSERT INTO sync_state (provider, last_ok, last_attempt, status, message, rows) VALUES (?, ?, ?, ?, ?, ?)
@@ -93,6 +100,18 @@ export function openSqliteStore(dataDir: string): Store {
     },
     async countPoints(prefix) {
       return Number((cntPoints.get(prefix) as { n: number }).n);
+    },
+    async addLiquidations(rows) {
+      tx(() => {
+        for (const r of rows) insLiq.run(r.t, r.venue, r.side, r.price, r.usd);
+      });
+      return rows.length;
+    },
+    async getLiquidations(fromT) {
+      return selLiq.all(fromT) as unknown as LiquidationPrint[];
+    },
+    async firstLiquidationT() {
+      return ((selFirstLiq.get() as { t: number | null } | undefined)?.t ?? null) as number | null;
     },
     async getSyncStates() {
       return (selSync.all() as unknown as Record<string, unknown>[]).map((r) => ({

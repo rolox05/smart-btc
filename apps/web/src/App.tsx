@@ -6,6 +6,9 @@ import { type CSSProperties, useMemo, useState } from 'react';
 import { BacktestPanel } from './components/BacktestPanel';
 import { DataPanel } from './components/DataPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { EventsPanel } from './components/EventsPanel';
+import { LiveLiquidations } from './components/LiveLiquidations';
+import { ModelsPanel } from './components/ModelsPanel';
 import { ForecastPanel, ForecastSettingsBar } from './components/ForecastPanel';
 import { GuidePanel, type GuideSection } from './components/GuidePanel';
 import { Header } from './components/Header';
@@ -24,7 +27,10 @@ import {
   useCandles,
   useForecast,
   useLiquidationHeatmap,
+  useEvents,
   useLiquidity,
+  useLiveLiquidations,
+  useModels,
   useOverview,
   useRelations,
   useSeries,
@@ -57,6 +63,8 @@ const VIEWS: { id: string; tf: Timeframe; bars: number; hint: string }[] = [
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'forecast', label: 'Forecast' },
+  { id: 'models', label: 'Models' },
+  { id: 'events', label: 'Events' },
   { id: 'odds', label: 'Odds' },
   { id: 'trade', label: 'Trade' },
   { id: 'backtest', label: 'Backtest' },
@@ -125,6 +133,9 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const heatmap = useLiquidationHeatmap(state.heatmapWindow, state.center === 'heatmap');
   const tradeReq = useDebounced(useMemo(() => ({ settings, ...state.trade, entry: 0 }), [settings, state.trade]), 350);
   const trade = useTradeSetup(tradeReq, state.tab === 'trade', priceVersion);
+  const models = useModels(settings, state.tab === 'models', barVersion);
+  const events = useEvents(state.tab === 'events');
+  const liveLiquidations = useLiveLiquidations(state.tab === 'liquidity');
 
   // Chart annotations (e.g. RSI divergences) that are switched on and known to the server.
   const annotationDefs = useMemo(
@@ -400,7 +411,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
           </div>
 
           <ErrorBoundary {...boundary} resetKey={`${state.tab}:${tf}`}>
-          {noInputs && state.tab !== 'liquidity' && state.tab !== 'data' && state.tab !== 'guide' ? (
+          {noInputs && !['liquidity', 'data', 'guide', 'models', 'events'].includes(state.tab) ? (
             <Note tone="warn">{t('No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.')}</Note>
           ) : (
             <>
@@ -430,6 +441,17 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
               )}
             </>
           )}
+          {state.tab === 'models' && (
+            <Async query={models} loadingLabel={t('Fitting and back-testing the three models…')}>
+              {(m) => <ModelsPanel report={m} />}
+            </Async>
+          )}
+          {state.tab === 'events' && (
+            <Async query={events} loadingLabel={t('Loading the event calendar…')}>
+              {(e) => <EventsPanel report={e} />}
+            </Async>
+          )}
+          {state.tab === 'liquidity' && liveLiquidations.data && <LiveLiquidations feed={liveLiquidations.data} />}
           {state.tab === 'liquidity' && (
             <Async query={liquidity} loadingLabel={t('Reading order books and estimating liquidation levels…')}>
               {(l) => <LiquidityPanel report={l} />}

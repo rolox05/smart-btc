@@ -1,4 +1,4 @@
-import type { Candle } from '@smart-btc/shared';
+import type { Candle, LiquidationPrint } from '@smart-btc/shared';
 
 export interface Point {
   t: number;
@@ -27,6 +27,11 @@ export interface Store {
   getPoints(series: string, fromT?: number): Promise<Point[]>;
   lastPointT(series: string): Promise<number | null>;
   countPoints(prefix: string): Promise<number>;
+
+  /** Forced liquidations collected from the exchange websockets (times in milliseconds). */
+  addLiquidations(rows: LiquidationPrint[]): Promise<number>;
+  getLiquidations(fromT: number): Promise<LiquidationPrint[]>;
+  firstLiquidationT(): Promise<number | null>;
 
   getSyncStates(): Promise<SyncState[]>;
   setSyncState(state: SyncState): Promise<void>;

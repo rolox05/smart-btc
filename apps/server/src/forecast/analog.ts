@@ -282,7 +282,7 @@ const volCache = new WeakMap<Dataset, { ewma: Float64Array; long: Float64Array }
  * Per-bar variance estimates from past returns only: a RiskMetrics EWMA (λ = 0.94 per day) for the
  * current level and a trailing one-year mean of squared returns for the long-run level.
  */
-function volArrays(ds: Dataset) {
+export function volArrays(ds: Dataset) {
   let v = volCache.get(ds);
   if (v) return v;
   const n = ds.n;

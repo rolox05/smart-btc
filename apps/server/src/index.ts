@@ -6,6 +6,7 @@ import { DatasetService } from './analytics/dataset.js';
 import { config } from './config.js';
 import { registerRoutes } from './routes.js';
 import { openSqliteStore } from './store/sqliteStore.js';
+import { LiquidationStream } from './providers/liquidationStream.js';
 import { SyncService } from './sync.js';
 
 const app = Fastify({ logger: { level: 'warn' } });
@@ -16,7 +17,9 @@ const datasets = new DatasetService(store);
 const sync = new SyncService(store, (msg) => console.log(`[sync] ${msg}`));
 sync.onData(() => datasets.invalidate());
 
-registerRoutes(app, datasets, sync);
+const liquidations = new LiquidationStream(store, (msg) => console.log(`[stream] ${msg}`));
+
+registerRoutes(app, datasets, sync, { store, liquidations });
 
 // In production the API also serves the built web app (npm run build && npm start).
 if (existsSync(config.webDist)) {
@@ -28,11 +31,14 @@ if (existsSync(config.webDist)) {
 
 await app.listen({ port: config.port, host: config.host });
 console.log(`[server] smart-btc API on http://${config.host}:${config.port}`);
-if (config.syncEnabled) sync.start();
-else console.log('[server] SYNC=off – serving local data only');
+if (config.syncEnabled) {
+  sync.start();
+  liquidations.start();
+} else console.log('[server] SYNC=off – serving local data only');
 
 const shutdown = async () => {
   sync.stop();
+  await liquidations.stop();
   await app.close();
   await store.close();
   process.exit(0);
