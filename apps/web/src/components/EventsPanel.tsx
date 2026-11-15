@@ -71,7 +71,7 @@ export function EventsPanel({ report }: { report: EventsReport }) {
           </table>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-mute">
-          {t('"Risk vs normal" is what the Models tab uses: an event inside the forecast horizon widens the range only if past ones were riskier than ordinary days. Daily bars hide the first minutes after a release, where most of the reaction happens.')}
+          {t('"Risk vs normal" is what the Models section of the Evidence tab uses: an event inside the forecast horizon widens the range only if past ones were riskier than ordinary days. Daily bars hide the first minutes after a release, where most of the reaction happens.')}
         </p>
       </Card>
 

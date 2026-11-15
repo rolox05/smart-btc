@@ -109,7 +109,7 @@ function collect(target) {
   for (const dir of cfg.dirs) {
     for (const file of walk(join(ROOT, dir), cfg.skip)) {
       const src = readFileSync(file, 'utf8');
-      const fns = target === 'server' ? ['t', 'tr', 'r'] : ['t', 'tr', 'tx', 'layer'];
+      const fns = target === 'server' ? ['t', 'tr', 'r'] : ['t', 'tr', 'tx', 'layer', 'msg'];
       for (const k of [...callLiterals(src, fns), ...fieldLiterals(src, LABEL_FIELDS[target])]) keys.add(k);
       if (target === 'web' && file.endsWith('GuidePanel.tsx')) {
         // TERMS and WINDOW_LABEL tables

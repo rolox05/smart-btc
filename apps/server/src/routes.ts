@@ -6,10 +6,14 @@ import {
   type BacktestRequest,
   type BacktestResult,
   type BacktestSummary,
+  type ForecastResult,
+  type ForecastSettings,
   type Overview,
   type SeriesPayload,
   type Ticker,
   type Timeframe,
+  type TodaySnapshot,
+  type TodaySummary,
 } from '@smart-btc/shared';
 import { type Dataset, type DatasetService, snapshot } from './analytics/dataset.js';
 import { annotationsFor, buildAnnotation } from './analytics/divergence.js';
@@ -19,11 +23,11 @@ import { liquidityReport } from './analytics/liquidity.js';
 import { metricsFor } from './analytics/metrics.js';
 import { buildRelations } from './analytics/relations.js';
 import { eventData, eventOverlay, eventsReport } from './analytics/events.js';
+import { buildToday, snapshotOf } from './analytics/today.js';
 import { PreparedCache } from './forecast/analog.js';
 import { runModels } from './forecast/models.js';
 import { type LiquidationStream, liquidationFeed } from './providers/liquidationStream.js';
 import type { PriceStream } from './providers/priceStream.js';
-import { registerLiveStream } from './liveStream.js';
 import type { Store } from './store/store.js';
 import { runBacktest } from './forecast/backtest.js';
 import { ForecastError, runForecast } from './forecast/forecast.js';
@@ -34,7 +38,7 @@ import type { SyncService } from './sync.js';
 
 const tfSchema = z.enum(TIMEFRAMES).default('1d');
 
-const settingsSchema = z.object({
+export const settingsSchema = z.object({
   timeframe: tfSchema,
   horizon: z.number().int().min(1).max(400),
   features: z.array(z.string()).max(30),
@@ -116,6 +120,8 @@ export function registerRoutes(
     if (err instanceof z.ZodError) {
       return reply.status(400).send({ error: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') });
     }
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) return reply.status(status).send({ error: err.message });
     app.log.error(err);
     return reply.status(500).send({ error: err.message || 'Internal error' });
   });
@@ -211,8 +217,6 @@ export function registerRoutes(
     return liquidityReport(await dataset('1d', t), t);
   });
 
-  registerLiveStream(app, live);
-
   // Liquidations received over the exchange websockets and stored locally.
   app.get('/api/liquidations', async () => {
     const ds = await dataset('1d');
@@ -272,16 +276,46 @@ export function registerRoutes(
   });
 
   // The three models side by side, with the consensus widened for events inside the horizon.
-  app.post('/api/models', async (req) => {
-    const settings = settingsSchema.parse(req.body);
-    const t = trOf(req);
+  const modelsFor = async (settings: ForecastSettings, t: T) => {
     const ds = await dataset(settings.timeframe, t);
     const daily = await dataset('1d', t);
     const events = await eventData(daily, t);
     const overlay = eventOverlay(events.upcoming, events.studies, Math.floor(Date.now() / 1000), settings.horizon * ds.barDays);
-    return results.get(`m:${t.lang}:${stamp(ds)}:${JSON.stringify(settings)}:${overlay.spreadMultiplier.toFixed(3)}`, () =>
+    const report = results.get(`m:${t.lang}:${stamp(ds)}:${JSON.stringify(settings)}:${overlay.spreadMultiplier.toFixed(3)}`, () =>
       runModels(ds, prepared.get(ds, settings.horizon), settings, overlay, t),
     );
+    return { ds, daily, events, report };
+  };
+  app.post('/api/models', async (req) => (await modelsFor(settingsSchema.parse(req.body), trOf(req))).report);
+
+  // The conclusion first: one reading built from the models, the forecast, the calendar and liquidity.
+  const todayFor = async (settings: ForecastSettings, t: T): Promise<TodaySummary | null> => {
+    const { ds, daily, events, report } = await modelsFor(settings, t);
+    let forecast: ForecastResult | null = null;
+    if (settings.features.length) {
+      try {
+        forecast = results.get(`f:${t.lang}:${ds.version}:${JSON.stringify(settings)}`, () => runForecast(ds, prepared.get(ds, settings.horizon), settings, t));
+      } catch (err) {
+        if (!(err instanceof ForecastError)) throw err;
+      }
+    }
+    // Order books are live calls to the exchanges; the summary does not wait on a failure there.
+    const liquidity = await liquidityReport(daily, t).catch(() => null);
+    const series = `${settings.timeframe}:${settings.horizon}`;
+    let previous: TodaySnapshot | null = null;
+    try {
+      previous = JSON.parse((await live.store.previousReading(series, report.asOf)) ?? 'null') as TodaySnapshot | null;
+    } catch {
+      /* an unreadable saved reading is treated as none */
+    }
+    const summary = buildToday({ models: report, forecast, events: events.upcoming, liquidity, previous, now: Math.floor(Date.now() / 1000), barDays: ds.barDays }, t);
+    if (summary) await live.store.saveReading(series, summary.asOf, JSON.stringify(snapshotOf(summary)));
+    return summary;
+  };
+  app.post('/api/today', async (req, reply): Promise<TodaySummary | undefined> => {
+    const t = trOf(req);
+    const summary = await todayFor(settingsSchema.parse(req.body), t);
+    return summary ?? reply.status(422).send({ error: t('Not enough history on this timeframe to fit the model.') });
   });
 
   // The still-open candle moves a backtest by nothing material, so its cache follows completed bars only.
@@ -320,4 +354,7 @@ export function registerRoutes(
       runTradeSetup(ds, prepared.get(ds, body.settings.horizon), body, t),
     );
   });
+
+  // What other parts of the server (the alert engine) may compute through the same caches.
+  return { today: todayFor };
 }

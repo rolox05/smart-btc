@@ -6,6 +6,7 @@ import {
   type AnnotationSegment,
   type Candle,
   type ForecastResult,
+  type KeyLevel,
   type LiquidityLevel,
   type LiquidityReport,
   type MetricDef,
@@ -51,6 +52,12 @@ const PANE_HEIGHT = 132;
 interface Props {
   candles: Candle[];
   ticker?: Ticker;
+  /** Prices from the Today summary, drawn when the key-levels layer is on. */
+  keyLevels?: KeyLevel[];
+  /** Stop and target of the trade being planned, if one has been worked out. */
+  trade?: { side: 'long' | 'short'; stopPrice: number; takePrice: number };
+  /** Horizon label for the range lines, e.g. "30d". */
+  horizonLabel?: string;
   metrics: MetricDef[];
   visible: string[];
   series?: SeriesPayload;
@@ -122,7 +129,7 @@ function fmtVolB(usd: number): string {
   return `$${b.toFixed(digits)}B`;
 }
 
-export function PriceChart({ candles, ticker, metrics, visible, series, forecast, liquidity, annotationDefs, annotationData, layers, tf, rangeBars, explain }: Props) {
+export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, metrics, visible, series, forecast, liquidity, annotationDefs, annotationData, layers, tf, rangeBars, explain }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const refs = useRef<Refs | null>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
@@ -542,6 +549,33 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       r.priceLines.push(r.candle.createPriceLine({ id, price, color, title, lineStyle, lineWidth: 1, axisLabelVisible: true }));
       objects.set(id, info);
     };
+    if (layers.levels) {
+      const h = horizonLabel ?? '';
+      const where = (l: KeyLevel) => `${fmtUsd(l.price)} (${fmtPct(l.distancePct)})`;
+      for (const l of keyLevels ?? []) {
+        if (l.kind === 'rangeHigh' || l.kind === 'rangeLow') {
+          add(l.price, UI.accent, t(l.kind === 'rangeHigh' ? '80% range high · {h}' : '80% range low · {h}', { h }), LineStyle.Dotted, {
+            title: t(l.kind === 'rangeHigh' ? 'Top of the expected range · {where}' : 'Bottom of the expected range · {where}', { where: where(l) }),
+            text: t('The three models together put eight outcomes in ten between the two range lines by the end of the horizon ({h}). One outcome in ten ends beyond each line.', { h }),
+          });
+        } else if (l.kind === 'median') {
+          add(l.price, UI.ink2, t('Median outcome · {h}', { h }), LineStyle.Dotted, {
+            title: t('Median outcome · {where}', { where: where(l) }),
+            text: t('Half of the modelled outcomes end above this price and half below. It is the middle of a wide range, not a target.'),
+          });
+        } else {
+          const above = l.kind === 'liqAbove';
+          add(l.price, SERIES[3], t(above ? 'Liquidations above {usd}' : 'Liquidations below {usd}', { usd: fmtCompactUsd(l.notionalUsd) }), LineStyle.Dashed, {
+            title: t(above ? 'Largest liquidation cluster above · {where}' : 'Largest liquidation cluster below · {where}', { where: where(l) }),
+            text: t(above ? 'About {usd} of leveraged shorts would be force-closed around here, which adds fuel to a move that reaches it.' : 'About {usd} of leveraged longs would be force-closed around here, which adds fuel to a move that reaches it.', { usd: fmtCompactUsd(l.notionalUsd) }),
+          });
+        }
+      }
+      if (trade) {
+        add(trade.stopPrice, UI.down, t('Stop'), LineStyle.Solid, { title: t('Stop · {price}', { price: fmtUsd(trade.stopPrice) }), text: t('Where the trade set up in the Trade tab is closed at a loss.') });
+        add(trade.takePrice, UI.up, t('Target'), LineStyle.Solid, { title: t('Target · {price}', { price: fmtUsd(trade.takePrice) }), text: t('Where the trade set up in the Trade tab takes its profit.') });
+      }
+    }
     if (layers.targets && forecast) {
       for (const s of forecast.scenarios) {
         if (s.id === 'range' || s.probability < 0.03) continue;
@@ -586,7 +620,7 @@ export function PriceChart({ candles, ticker, metrics, visible, series, forecast
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forecast, liquidity, layers.targets, layers.swings, layers.liquidations, layers.walls, structureKey]);
+  }, [forecast, liquidity, keyLevels, trade?.stopPrice, trade?.takePrice, horizonLabel, layers.levels, layers.targets, layers.swings, layers.liquidations, layers.walls, structureKey]);
 
   // ── legend values at the crosshair (or latest) ──
   const idxByT = useMemo(() => new Map(candles.map((c, i) => [c.t, i])), [candles]);

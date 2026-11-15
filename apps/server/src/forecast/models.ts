@@ -580,5 +580,6 @@ export function runModels(ds: Dataset, prep: Prepared, s: ForecastSettings, over
     notes.push(t('{n} scheduled events fall inside the horizon, so the consensus range is widened by {pct}%.', { n: overlay.events.length, pct: Math.round((overlay.spreadMultiplier - 1) * 100) }));
   }
 
-  return { timeframe: ds.tf, horizon: H, thresholdPct: T, price, asOf: ds.t[qf], evaluations: scores.base.n, from, to, models, weights, overlay, adjusted, agreement, notes };
+  const base = today.base ? { pUp: 1 - today.base.cdf(0), pRally: 1 - today.base.cdf(rallyT), pDecline: today.base.cdf(declT) } : null;
+  return { timeframe: ds.tf, horizon: H, thresholdPct: T, price, asOf: ds.t[qf], evaluations: scores.base.n, from, to, models, weights, overlay, adjusted, agreement, base, notes };
 }

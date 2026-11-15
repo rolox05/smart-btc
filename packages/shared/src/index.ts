@@ -409,6 +409,7 @@ export interface LiquidationFeed {
 export interface LiveEvents {
   ticker: Ticker;
   liquidations: LiquidationPrint[];
+  alert: AlertEvent;
 }
 
 // ───────────────────────── forecast ─────────────────────────
@@ -871,7 +872,195 @@ export interface ModelsReport {
   /** Consensus after widening for scheduled events. */
   adjusted: { q10: number; q25: number; q50: number; q75: number; q90: number; pRally: number; pDecline: number; pRange: number };
   agreement: 'bullish' | 'bearish' | 'mixed';
+  /** The unconditional history at this horizon: what any day gives, with no model. */
+  base: { pUp: number; pRally: number; pDecline: number } | null;
   notes: string[];
+}
+
+// ───────────────────────── today summary ─────────────────────────
+
+/** Whether the models say anything a plain base rate would not. */
+export type EdgeState = 'none' | 'weak' | 'present';
+
+export interface TodayScenario {
+  id: 'bear' | 'base' | 'bull';
+  probability: number;
+  /** The same scenario's share in the unconditional history, when known. */
+  baseProbability: number | null;
+  lowPrice: number;
+  highPrice: number;
+}
+
+export interface KeyLevel {
+  kind: 'rangeLow' | 'rangeHigh' | 'median' | 'liqAbove' | 'liqBelow';
+  price: number;
+  /** Distance from the current price, in %. */
+  distancePct: number;
+  /** Estimated notional resting at the level (liquidation clusters only). */
+  notionalUsd: number | null;
+}
+
+/** What a reading boils down to; also what is saved once per bar to compare the next one against. */
+export interface TodaySnapshot {
+  asOf: number;
+  price: number;
+  pUp: number;
+  medianPct: number;
+  edge: EdgeState;
+  direction: 'up' | 'down' | 'neutral';
+  confidence: 'low' | 'moderate' | 'good' | null;
+}
+
+export interface TodayChange {
+  field: 'pUp' | 'medianPct' | 'edge' | 'confidence' | 'direction';
+  from: number | string;
+  to: number | string;
+}
+
+/** The conclusion first: one reading built from the forecast, the three models, the calendar and liquidity. */
+export interface TodaySummary extends TodaySnapshot {
+  timeframe: Timeframe;
+  horizon: number;
+  /** Probability of a rise in the unconditional history. */
+  basePUp: number;
+  strength: 'slight' | 'clear' | null;
+  agreement: 'bullish' | 'bearish' | 'mixed';
+  /** Average walk-forward skill of the consensus against the base rate; null when it could not be tested. */
+  skill: number | null;
+  headline: string;
+  /** Why the reading is what it is, most important first. */
+  reasons: string[];
+  thresholdPct: number;
+  scenarios: TodayScenario[];
+  /** Scheduled events inside the horizon, soonest first. */
+  events: { kind: MarketEventKind; t: number; title: string; days: number; estimated: boolean }[];
+  levels: KeyLevel[];
+  /** The reading saved on an earlier bar and what moved since; null until a second bar has been seen. */
+  previous: TodaySnapshot | null;
+  changes: TodayChange[];
+}
+
+// ───────────────────────── settings and notifications ─────────────────────────
+
+export const CHANNEL_IDS = ['telegram', 'whatsapp'] as const;
+export type ChannelId = (typeof CHANNEL_IDS)[number];
+
+/** A stored secret as the interface sees it: never the value, only whether one is saved and how it ends. */
+export interface SecretView {
+  set: boolean;
+  hint: string;
+}
+
+export interface TelegramConfig {
+  enabled: boolean;
+  /** Token of a bot created with @BotFather. */
+  botToken: string;
+  /** Chat, group or channel the bot writes to. */
+  chatId: string;
+}
+
+export interface WhatsAppConfig {
+  enabled: boolean;
+  /** WhatsApp Cloud API: id of the sending phone number. */
+  phoneNumberId: string;
+  accessToken: string;
+  /** Recipient in international format, digits only. */
+  to: string;
+  /** Approved message template with one body variable; needed to write outside the 24-hour reply window. */
+  template: string;
+  templateLang: string;
+}
+
+/** Preferences kept on the server (those that must work with no browser open). */
+export interface AppSettings {
+  notifications: { telegram: TelegramConfig; whatsapp: WhatsAppConfig };
+}
+
+type Masked<T, K extends keyof T> = Omit<T, K> & { [P in K]: SecretView };
+export interface AppSettingsView {
+  notifications: {
+    telegram: Masked<TelegramConfig, 'botToken'> & { ready: boolean };
+    whatsapp: Masked<WhatsAppConfig, 'accessToken'> & { ready: boolean };
+  };
+}
+
+/** A change to the settings. Secrets: leave out to keep the saved value, send '' to delete it. */
+export interface AppSettingsPatch {
+  notifications?: { telegram?: Partial<TelegramConfig>; whatsapp?: Partial<WhatsAppConfig> };
+}
+
+export type NotificationKind = 'test' | 'alert';
+
+export interface NotificationMessage {
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  /** Messages with the same key are not repeated within the cooldown. */
+  dedupeKey?: string;
+}
+
+/** One delivery attempt, as kept in the log. */
+export interface NotificationDelivery {
+  at: number;
+  channel: ChannelId;
+  kind: NotificationKind;
+  title: string;
+  ok: boolean;
+  error: string | null;
+}
+
+// ───────────────────────── alerts ─────────────────────────
+
+interface AlertBase {
+  id: string;
+  enabled: boolean;
+  createdAt: number;
+  lastFiredAt: number | null;
+  /** Switch the rule off after it fires. */
+  once: boolean;
+  /** Language the message is written in. */
+  lang: Lang;
+}
+
+/** Price trades through a level, coming from the other side. */
+export interface PriceAlert extends AlertBase {
+  type: 'price';
+  direction: 'above' | 'below';
+  price: number;
+}
+
+/** Forced liquidations add up to at least `minUsd` within `windowMin` minutes. */
+export interface LiquidationAlert extends AlertBase {
+  type: 'liquidations';
+  side: 'any' | 'long' | 'short';
+  minUsd: number;
+  windowMin: number;
+}
+
+/** The Today reading for these settings changes its lean or its edge. */
+export interface ReadingAlert extends AlertBase {
+  type: 'reading';
+  settings: ForecastSettings;
+  /** The reading last seen, to compare the next one against. */
+  last: { direction: TodaySnapshot['direction']; edge: EdgeState } | null;
+}
+
+export type AlertRule = PriceAlert | LiquidationAlert | ReadingAlert;
+
+/** What the interface sends to create a rule. */
+export type AlertInput =
+  | Pick<PriceAlert, 'type' | 'direction' | 'price' | 'once'>
+  | Pick<LiquidationAlert, 'type' | 'side' | 'minUsd' | 'windowMin' | 'once'>
+  | Pick<ReadingAlert, 'type' | 'settings' | 'once'>;
+
+/** A rule that has just fired. */
+export interface AlertEvent {
+  ruleId: string;
+  at: number;
+  title: string;
+  body: string;
+  /** Channels the message was delivered to; empty when none is switched on. */
+  deliveredTo: ChannelId[];
 }
 
 // ───────────────────────── events ─────────────────────────

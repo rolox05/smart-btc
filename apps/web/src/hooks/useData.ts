@@ -113,3 +113,20 @@ export const useTradeSetup = (req: TradeSetupRequest, enabled: boolean, dataVers
     retry,
     retryDelay,
   });
+
+/** The one-glance summary; it follows completed bars, like the models it is built from. */
+export const useToday = (settings: ForecastSettings, dataVersion: number | undefined) =>
+  useQuery({
+    queryKey: ['today', settings, dataVersion],
+    queryFn: () => api.today(settings),
+    placeholderData: keepPreviousData,
+    staleTime: 10 * 60_000,
+    retry,
+    retryDelay,
+  });
+
+export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api.settings, staleTime: Infinity, retry, retryDelay });
+
+export const useNotificationLog = () => useQuery({ queryKey: ['notifications'], queryFn: api.notifications, retry, retryDelay });
+
+export const useAlerts = () => useQuery({ queryKey: ['alerts'], queryFn: api.alerts, retry, retryDelay });

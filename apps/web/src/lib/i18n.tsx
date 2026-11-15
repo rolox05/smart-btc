@@ -20,6 +20,8 @@ export function setLang(lang: Lang) {
 
 /** Translate outside components (formatters). Keys are the English texts, with {placeholders}. */
 export const tr = (key: string, vars?: Vars) => translate(DICTS[current], key, vars);
+/** Marks a text kept in a table as translatable; it is translated with t() where it is shown. */
+export const msg = (key: string) => key;
 
 const LangContext = createContext<Lang>('en');
 export const LangProvider = LangContext.Provider;

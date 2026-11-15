@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { Candle, LiquidationPrint } from '@smart-btc/shared';
+import type { Candle, LiquidationPrint, NotificationDelivery } from '@smart-btc/shared';
 import type { Point, Store, SyncState } from './store.js';
 
 // node:sqlite is loaded through require so that bundlers/transpilers never rewrite the specifier.
@@ -22,6 +22,15 @@ CREATE TABLE IF NOT EXISTS liquidations (
   t INTEGER NOT NULL, venue TEXT NOT NULL, side TEXT NOT NULL, price REAL NOT NULL, usd REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS liquidations_t ON liquidations (t);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS notification_log (
+  at INTEGER NOT NULL, channel TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, ok INTEGER NOT NULL, error TEXT
+);
+CREATE INDEX IF NOT EXISTS notification_log_at ON notification_log (at);
+CREATE TABLE IF NOT EXISTS readings (
+  series TEXT NOT NULL, as_of INTEGER NOT NULL, json TEXT NOT NULL,
+  PRIMARY KEY (series, as_of)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sync_state (
   provider TEXT PRIMARY KEY, last_ok INTEGER, last_attempt INTEGER,
   status TEXT NOT NULL, message TEXT NOT NULL, rows INTEGER NOT NULL
@@ -52,6 +61,12 @@ export function openSqliteStore(dataDir: string): Store {
   const insLiq = db.prepare('INSERT INTO liquidations (t, venue, side, price, usd) VALUES (?, ?, ?, ?, ?)');
   const selLiq = db.prepare('SELECT t, venue, side, price, usd FROM liquidations WHERE t >= ? ORDER BY t');
   const selFirstLiq = db.prepare('SELECT MIN(t) AS t FROM liquidations');
+  const selSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
+  const upSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
+  const insNote = db.prepare('INSERT INTO notification_log (at, channel, kind, title, ok, error) VALUES (?, ?, ?, ?, ?, ?)');
+  const selNotes = db.prepare('SELECT at, channel, kind, title, ok, error FROM notification_log ORDER BY at DESC LIMIT ?');
+  const upReading = db.prepare('INSERT INTO readings (series, as_of, json) VALUES (?, ?, ?) ON CONFLICT (series, as_of) DO UPDATE SET json = excluded.json');
+  const selPrevReading = db.prepare('SELECT json FROM readings WHERE series = ? AND as_of < ? ORDER BY as_of DESC LIMIT 1');
   const selSync = db.prepare('SELECT provider, last_ok, last_attempt, status, message, rows FROM sync_state');
   const upSync = db.prepare(
     `INSERT INTO sync_state (provider, last_ok, last_attempt, status, message, rows) VALUES (?, ?, ?, ?, ?, ?)
@@ -112,6 +127,31 @@ export function openSqliteStore(dataDir: string): Store {
     },
     async firstLiquidationT() {
       return ((selFirstLiq.get() as { t: number | null } | undefined)?.t ?? null) as number | null;
+    },
+    async getSetting(key) {
+      return ((selSetting.get(key) as { value: string } | undefined)?.value ?? null) as string | null;
+    },
+    async setSetting(key, value) {
+      upSetting.run(key, value);
+    },
+    async addNotification(r) {
+      insNote.run(r.at, r.channel, r.kind, r.title, r.ok ? 1 : 0, r.error);
+    },
+    async getNotifications(limit) {
+      return (selNotes.all(limit) as unknown as Record<string, unknown>[]).map((r) => ({
+        at: Number(r.at),
+        channel: r.channel as NotificationDelivery['channel'],
+        kind: r.kind as NotificationDelivery['kind'],
+        title: String(r.title),
+        ok: Number(r.ok) === 1,
+        error: (r.error as string | null) ?? null,
+      }));
+    },
+    async saveReading(series, asOf, json) {
+      upReading.run(series, asOf, json);
+    },
+    async previousReading(series, asOf) {
+      return ((selPrevReading.get(series, asOf) as { json: string } | undefined)?.json ?? null) as string | null;
     },
     async getSyncStates() {
       return (selSync.all() as unknown as Record<string, unknown>[]).map((r) => ({

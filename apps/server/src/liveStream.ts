@@ -1,6 +1,7 @@
 import type { LiveEvents } from '@smart-btc/shared';
 import type { FastifyInstance } from 'fastify';
 import type { ServerResponse } from 'node:http';
+import type { AlertEngine } from './alerts/engine.js';
 import type { LiquidationStream } from './providers/liquidationStream.js';
 import type { PriceStream } from './providers/priceStream.js';
 
@@ -11,10 +12,10 @@ const frame = <K extends keyof LiveEvents>(event: K, data: LiveEvents[K]) => `ev
 
 /**
  * GET /api/stream – one Server-Sent Events connection per browser tab carrying what changes by the
- * second: the price and each forced liquidation. The exchange websockets stay on the server; the
+ * second: the price, each forced liquidation and every alert that fires. The exchange websockets stay on the server; the
  * browser only listens here, so nothing has to be polled while the stream is up.
  */
-export function registerLiveStream(app: FastifyInstance, live: { liquidations: LiquidationStream; prices: PriceStream }) {
+export function registerLiveStream(app: FastifyInstance, live: { liquidations: LiquidationStream; prices: PriceStream; alerts: AlertEngine }) {
   const clients = new Set<ServerResponse>();
   const broadcast = (text: string) => {
     for (const res of clients) res.write(text);
@@ -22,6 +23,7 @@ export function registerLiveStream(app: FastifyInstance, live: { liquidations: L
 
   live.prices.onTicker((ticker) => clients.size && broadcast(frame('ticker', ticker)));
   live.liquidations.onPrints((prints) => clients.size && broadcast(frame('liquidations', prints)));
+  live.alerts.onAlert((event) => broadcast(frame('alert', event)));
   const heartbeat = setInterval(() => broadcast(': keep-alive\n\n'), HEARTBEAT_MS);
   heartbeat.unref();
 

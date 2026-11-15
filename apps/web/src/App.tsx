@@ -10,6 +10,7 @@ import { Header } from './components/Header';
 import { MetricSidebar } from './components/MetricSidebar';
 import { PriceChart } from './components/PriceChart';
 import { ResizeHandle } from './components/ResizeHandle';
+import { TodayCard } from './components/TodayCard';
 import { Async, Loading, Note, Segmented } from './components/ui';
 import {
   useAnnotations,
@@ -25,6 +26,7 @@ import {
   useRelations,
   useSeries,
   useTicker,
+  useToday,
   useTradeSetup,
 } from './hooks/useData';
 import { api } from './lib/api';
@@ -34,7 +36,6 @@ import { useLiveStream } from './hooks/useLiveStream';
 
 // Everything outside the first screen (chart + forecast) is loaded when its tab or view is first opened.
 const BacktestPanel = lazy(() => import('./components/BacktestPanel').then((m) => ({ default: m.BacktestPanel })));
-const DataPanel = lazy(() => import('./components/DataPanel').then((m) => ({ default: m.DataPanel })));
 const EventsPanel = lazy(() => import('./components/EventsPanel').then((m) => ({ default: m.EventsPanel })));
 const GuidePanel = lazy(() => import('./components/GuidePanel').then((m) => ({ default: m.GuidePanel })));
 const LiquidationHeatmapView = lazy(() => import('./components/LiquidationHeatmap').then((m) => ({ default: m.LiquidationHeatmapView })));
@@ -43,9 +44,9 @@ const LiveLiquidations = lazy(() => import('./components/LiveLiquidations').then
 const ModelsPanel = lazy(() => import('./components/ModelsPanel').then((m) => ({ default: m.ModelsPanel })));
 const OddsPanel = lazy(() => import('./components/OddsPanel').then((m) => ({ default: m.OddsPanel })));
 const RankingPanel = lazy(() => import('./components/RankingPanel').then((m) => ({ default: m.RankingPanel })));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })));
 const TradePanel = lazy(() => import('./components/TradePanel').then((m) => ({ default: m.TradePanel })));
 
-// The Data tab stays reachable from the source-status button in the header.
 /**
  * The single time selector. Each entry fixes both the bar size and how much history is on screen:
  * the first six are one bar size each, the rest are daily bars over a longer stretch.
@@ -65,16 +66,15 @@ const VIEWS: { id: string; tf: Timeframe; bars: number; hint: string }[] = [
   { id: 'All', tf: '1d', bars: 0, hint: 'Daily bars, all history' },
 ];
 
+/** Evidence groups everything that answers "how far can this be trusted": the models, their backtest and the input ranking. */
 const TABS: { id: TabId; label: string }[] = [
   { id: 'forecast', label: 'Forecast' },
-  { id: 'models', label: 'Models' },
-  { id: 'events', label: 'Events' },
-  { id: 'odds', label: 'Odds' },
   { id: 'trade', label: 'Trade' },
-  { id: 'backtest', label: 'Backtest' },
-  { id: 'ranking', label: 'Ranking' },
+  { id: 'evidence', label: 'Evidence' },
+  { id: 'events', label: 'Events' },
   { id: 'liquidity', label: 'Liquidity' },
   { id: 'guide', label: 'Guide' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export default function App() {
@@ -89,7 +89,7 @@ export default function App() {
 }
 
 function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state' | 'patch'>) {
-  const { t } = useT();
+  const { t, dur } = useT();
   const qc = useQueryClient();
   const [rankingKey, setRankingKey] = useState<string | null>(null);
   const [guideSection, setGuideSection] = useState<GuideSection>('metrics');
@@ -132,13 +132,14 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const barVersion = fresh?.asOf;
   const forecast = useForecast(settings, priceVersion);
   const backtestReq = useDebounced(useMemo(() => ({ settings, ...state.backtest }), [settings, state.backtest]), 350);
-  const backtest = useBacktest(backtestReq, state.tab === 'forecast' || state.tab === 'backtest', barVersion);
+  const backtest = useBacktest(backtestReq, state.tab === 'forecast' || (state.tab === 'evidence' && state.evidenceView === 'backtest'), barVersion);
   const wantLiquidity = state.layers.swings || state.layers.liquidations || state.layers.walls || state.tab === 'liquidity';
   const liquidity = useLiquidity(wantLiquidity);
   const heatmap = useLiquidationHeatmap(state.heatmapWindow, state.center === 'heatmap');
   const tradeReq = useDebounced(useMemo(() => ({ settings, ...state.trade, entry: 0 }), [settings, state.trade]), 350);
   const trade = useTradeSetup(tradeReq, state.tab === 'trade', priceVersion);
-  const models = useModels(settings, state.tab === 'models', barVersion);
+  const models = useModels(settings, state.tab === 'evidence' && state.evidenceView === 'models', barVersion);
+  const today = useToday(settings, barVersion);
   const events = useEvents(state.tab === 'events');
   const liveLiquidations = useLiveLiquidations(state.tab === 'liquidity', live.pushed);
 
@@ -200,7 +201,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
       overview={overview.data}
       onRefresh={() => refresh.mutate()}
       refreshing={refresh.isPending}
-      onOpenData={() => patch({ tab: 'data' })}
+      onOpenData={() => patch({ tab: 'settings' })}
       explain={state.explain}
       onExplain={(explain) => patch({ explain })}
       lang={state.lang}
@@ -238,6 +239,10 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   const switching = ov.timeframe !== tf;
   const forecastOk = forecast.data && !forecast.error && forecast.data.settings.timeframe === tf ? forecast.data : undefined;
   const noInputs = model.length === 0;
+  // Levels belong to the timeframe and horizon they were computed for; while those change, none are drawn.
+  const todayOk = today.data && today.data.timeframe === tf && today.data.horizon === settings.horizon ? today.data : undefined;
+  const tradeOk = trade.data && !trade.error && !noInputs ? { side: trade.data.side, stopPrice: trade.data.stopPrice, takePrice: trade.data.takePrice } : undefined;
+  const needsInputs = state.tab === 'forecast' || state.tab === 'trade' || (state.tab === 'evidence' && state.evidenceView !== 'models');
   const collapsed = state.sidebarCollapsed;
   const boundary = { title: t('This panel could not be displayed'), retryLabel: t('Try again') };
   const widths = state.panelWidths;
@@ -251,6 +256,18 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   return (
     <div className="min-h-screen">
       {header}
+      {live.alert && (
+        <div role="alert" className="fixed bottom-4 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-accent bg-raised p-3 shadow-xl">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-xs font-semibold text-ink">{live.alert.title}</div>
+            <button onClick={live.dismissAlert} aria-label={t('Dismiss')} className="-mt-0.5 text-mute hover:text-ink">×</button>
+          </div>
+          <div className="mt-1 text-[11.5px] leading-relaxed text-ink2">{live.alert.body}</div>
+          <div className="mt-1 text-[10.5px] text-mute">
+            {live.alert.deliveredTo.length ? t('Sent to {channels}.', { channels: live.alert.deliveredTo.join(', ') }) : t('Shown here only: no channel is switched on.')}
+          </div>
+        </div>
+      )}
 
       {/* From tablet width up the forecast always has the right-hand column. The metrics panel sits beside the chart
           on wide screens and under it on medium ones, and can be collapsed to hand its space to the chart. */}
@@ -349,6 +366,9 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
               <PriceChart
                 candles={candles.data}
                 ticker={ticker.data}
+                keyLevels={todayOk?.levels}
+                trade={tradeOk}
+                horizonLabel={dur(tf, settings.horizon)}
                 metrics={ov.metrics}
                 visible={visible}
                 series={series.data}
@@ -399,8 +419,11 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
         />
         <div className="thin-scroll flex min-w-0 flex-col gap-3 [&>*]:shrink-0 md:max-h-[calc(100vh-72px)] md:overflow-y-auto">
           <ForecastSettingsBar settings={{ ...state.settings, horizon }} onChange={(s) => patch({ settings: s })} />
+          <ErrorBoundary {...boundary} resetKey={`today:${tf}`}>
+            <TodayCard query={today} collapsed={state.todayCollapsed} onCollapsed={(todayCollapsed) => patch({ todayCollapsed })} />
+          </ErrorBoundary>
 
-          <div role="tablist" className="thin-scroll flex gap-0.5 overflow-x-auto rounded-lg border border-line bg-panel p-1">
+          <div role="tablist" className="flex flex-wrap gap-0.5 rounded-lg border border-line bg-panel p-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -419,23 +442,49 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
 
           <ErrorBoundary {...boundary} resetKey={`${state.tab}:${tf}`}>
           <Suspense fallback={<Loading />}>
-          {noInputs && !['liquidity', 'data', 'guide', 'models', 'events'].includes(state.tab) ? (
+          {state.tab === 'forecast' && (
+            <Segmented
+              label={t('Forecast section')}
+              size="sm"
+              value={state.forecastView}
+              onChange={(forecastView) => patch({ forecastView })}
+              options={[
+                { value: 'outlook', label: t('Outlook') },
+                { value: 'odds', label: t('Odds') },
+              ]}
+            />
+          )}
+          {state.tab === 'evidence' && (
+            <Segmented
+              label={t('Evidence section')}
+              size="sm"
+              value={state.evidenceView}
+              onChange={(evidenceView) => patch({ evidenceView })}
+              options={[
+                { value: 'models', label: t('Models') },
+                { value: 'backtest', label: t('Backtest') },
+                { value: 'ranking', label: t('Ranking') },
+              ]}
+            />
+          )}
+          {noInputs && needsInputs ? (
             <Note tone="warn">{t('No model inputs selected. Turn on at least one metric with the chip icon in the metrics list.')}</Note>
           ) : (
             <>
               {state.tab === 'forecast' && (
                 <Async query={forecast} loadingLabel={t('Searching history for similar setups…')}>
-                  {(f) => <ForecastPanel forecast={f} backtest={backtest.error ? undefined : backtest.data} backtestPending={backtest.isFetching} onOpenBacktest={() => patch({ tab: 'backtest' })} />}
-                </Async>
-              )}
-              {state.tab === 'odds' && (
-                <Async query={forecast} loadingLabel={t('Searching history for similar setups…')}>
-                  {(f) => <OddsPanel forecast={f} />}
+                  {(f) =>
+                    state.forecastView === 'odds' ? (
+                      <OddsPanel forecast={f} />
+                    ) : (
+                      <ForecastPanel forecast={f} backtest={backtest.error ? undefined : backtest.data} backtestPending={backtest.isFetching} onOpenBacktest={() => patch({ tab: 'evidence', evidenceView: 'backtest' })} />
+                    )
+                  }
                 </Async>
               )}
               {state.tab === 'trade' && <TradePanel form={state.trade} onChange={(tradeForm) => patch({ trade: tradeForm })} query={trade} price={ticker.data?.price ?? ov.price} />}
-              {state.tab === 'backtest' && <BacktestPanel query={backtest} params={state.backtest} onParams={(p) => patch({ backtest: p })} />}
-              {state.tab === 'ranking' && (
+              {state.tab === 'evidence' && state.evidenceView === 'backtest' && <BacktestPanel query={backtest} params={state.backtest} onParams={(p) => patch({ backtest: p })} />}
+              {state.tab === 'evidence' && state.evidenceView === 'ranking' && (
                 <RankingPanel
                   metrics={ov.metrics}
                   model={model}
@@ -449,7 +498,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
               )}
             </>
           )}
-          {state.tab === 'models' && (
+          {state.tab === 'evidence' && state.evidenceView === 'models' && (
             <Async query={models} loadingLabel={t('Fitting and back-testing the three models…')}>
               {(m) => <ModelsPanel report={m} />}
             </Async>
@@ -483,7 +532,21 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
               tf={tf}
             />
           )}
-          {state.tab === 'data' && <DataPanel overview={ov} onRefresh={() => refresh.mutate()} refreshing={refresh.isPending} />}
+          {state.tab === 'settings' && (
+            <SettingsPanel
+              overview={ov}
+              onRefresh={() => refresh.mutate()}
+              refreshing={refresh.isPending}
+              lang={state.lang}
+              onLang={(lang) => patch({ lang })}
+              explain={state.explain}
+              onExplain={(explain) => patch({ explain })}
+              layers={state.layers}
+              onLayers={(layers) => patch({ layers })}
+              forecastSettings={settings}
+              price={ticker.data?.price ?? ov.price}
+            />
+          )}
           </Suspense>
           </ErrorBoundary>
         </div>

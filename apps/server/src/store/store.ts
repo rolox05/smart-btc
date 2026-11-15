@@ -1,4 +1,4 @@
-import type { Candle, LiquidationPrint } from '@smart-btc/shared';
+import type { Candle, LiquidationPrint, NotificationDelivery } from '@smart-btc/shared';
 
 export interface Point {
   t: number;
@@ -32,6 +32,19 @@ export interface Store {
   addLiquidations(rows: LiquidationPrint[]): Promise<number>;
   getLiquidations(fromT: number): Promise<LiquidationPrint[]>;
   firstLiquidationT(): Promise<number | null>;
+
+  /** Small key/value store for preferences kept on the server. */
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
+
+  /** Log of notification deliveries, newest first. */
+  addNotification(row: NotificationDelivery): Promise<void>;
+  getNotifications(limit: number): Promise<NotificationDelivery[]>;
+
+  /** One saved summary per bar and series (JSON), to compare later readings against. */
+  saveReading(series: string, asOf: number, json: string): Promise<void>;
+  /** The latest reading of the series saved for a bar before `asOf`. */
+  previousReading(series: string, asOf: number): Promise<string | null>;
 
   getSyncStates(): Promise<SyncState[]>;
   setSyncState(state: SyncState): Promise<void>;

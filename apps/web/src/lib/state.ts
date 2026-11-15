@@ -1,7 +1,18 @@
 import { DEFAULT_FORECAST_SETTINGS, pickLang, type ForecastSettings, type HeatmapWindow, type Lang, type MetricDef } from '@smart-btc/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-export type TabId = 'forecast' | 'models' | 'events' | 'odds' | 'trade' | 'backtest' | 'ranking' | 'liquidity' | 'guide' | 'data';
+export type TabId = 'forecast' | 'trade' | 'evidence' | 'events' | 'liquidity' | 'guide' | 'settings';
+export type ForecastView = 'outlook' | 'odds';
+export type EvidenceView = 'models' | 'backtest' | 'ranking';
+
+/** Tabs that existed before they were grouped, and where each one lives now. */
+const MOVED_TABS: Record<string, Partial<Pick<AppState, 'tab' | 'forecastView' | 'evidenceView'>>> = {
+  odds: { tab: 'forecast', forecastView: 'odds' },
+  models: { tab: 'evidence', evidenceView: 'models' },
+  backtest: { tab: 'evidence', evidenceView: 'backtest' },
+  ranking: { tab: 'evidence', evidenceView: 'ranking' },
+  data: { tab: 'settings' },
+};
 
 export interface Layers {
   cone: boolean;
@@ -12,6 +23,8 @@ export interface Layers {
   logScale: boolean;
   /** Traded volume as bars along the bottom of the price pane. */
   volume: boolean;
+  /** The few prices that matter for the current reading: expected range, liquidation clusters, stop and target. */
+  levels: boolean;
 }
 
 export interface TradeForm {
@@ -57,7 +70,12 @@ export interface AppState {
   sidebarCollapsed: boolean;
   /** Widths (px) the side panels were dragged to; null = the default for the screen size. */
   panelWidths: { left: number | null; right: number | null };
+  /** Show only the headline of the Today summary. */
+  todayCollapsed: boolean;
   tab: TabId;
+  /** Section shown inside the Forecast and the Evidence tabs. */
+  forecastView: ForecastView;
+  evidenceView: EvidenceView;
   trade: TradeForm;
   backtest: { stepBars: number; touchPct: number };
 }
@@ -70,14 +88,17 @@ export const DEFAULT_STATE: AppState = {
   model: null,
   annotations: [],
   settings: baseSettings,
-  layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false, volume: true },
+  layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false, volume: true, levels: true },
   range: '1y',
   center: 'chart',
   heatmapWindow: '2w',
   explain: true,
   sidebarCollapsed: false,
   panelWidths: { left: null, right: null },
+  todayCollapsed: false,
   tab: 'forecast',
+  forecastView: 'outlook',
+  evidenceView: 'models',
   trade: { side: 'long', stopPct: 5, takePct: 10, leverage: 3, accountUsd: 10_000, riskPct: 1, feeBps: 5, stopMode: 'pct', stopAtr: 2, takeMode: 'pct', takeR: 2, kellyFraction: 0.25, confidence: 0.95 },
   backtest: { stepBars: 3, touchPct: 0 },
 };
@@ -101,6 +122,7 @@ function load(): AppState {
     return {
       ...DEFAULT_STATE,
       ...saved,
+      ...MOVED_TABS[saved.tab as string],
       settings: pick(DEFAULT_STATE.settings, saved.settings),
       layers: pick(DEFAULT_STATE.layers, saved.layers),
       trade: pick(DEFAULT_STATE.trade, saved.trade),

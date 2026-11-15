@@ -56,6 +56,7 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
         <div className="px-3 py-1.5">
           {layer('cone', 'Forecast cone', 'Draws where the modelled paths go from here: the median (solid), the band holding half of them (dashed) and the band holding eight in ten (dotted).')}
           {layer('targets', 'Scenario targets', 'Horizontal lines at the median outcome of the rally and decline scenarios, labelled with their probability.')}
+          {layer('levels', 'Key levels', 'The few prices that matter for the current reading: the range that should hold eight outcomes in ten, the median outcome, the largest estimated liquidation cluster on each side and, once a trade is set up, its stop and target.')}
           {layer('volume', 'Volume bars', 'Traded volume of each bar, drawn along the bottom of the price chart. Green when the bar closed higher than it opened, red when lower. Big moves on high volume carry more conviction than the same move on thin volume.')}
           {layer('swings', 'Liquidity pools (swing highs / lows)', 'Marks swing highs and lows that price has not revisited. Stop orders cluster just beyond them, so price is often drawn there.')}
           {layer('liquidations', 'Estimated liquidation clusters', 'Price zones where many leveraged positions would be force-closed. An estimate from open-interest growth and an assumed leverage mix, not exchange data.')}

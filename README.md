@@ -101,7 +101,7 @@ backtest for several variants (distance, kernel, analog spacing, adaptive blendi
 and 90 days. Only variants that won consistently are defaults; picking them on the same history is
 still mild over-fitting, so treat small skill differences as noise.
 
-## Three models and a consensus (Models tab)
+## Three models and a consensus (Evidence tab)
 
 | Model | What it does | Basis |
 |---|---|---|
@@ -121,6 +121,28 @@ moment the server first runs (Liquidity tab); neither exchange offers an archive
 The exchange connections live on the server, so they keep collecting with no browser open. The browser
 listens to a single Server-Sent Events stream (`GET /api/stream`) for the price (Binance spot ticker,
 about once per second) and each liquidation, and only falls back to polling if that stream goes quiet.
+
+## Today summary, key levels and notifications
+
+The **Today** card above the tabs gives the conclusion first: a one-line reading, three scenarios with
+their probabilities, the scheduled events and liquidation clusters to watch, and what changed since the
+previous bar (one reading per bar is saved locally). It is deliberately conservative: when the models
+sit close to the base rate, or have not beaten it in the walk-forward test, it says "no edge".
+The same prices can be drawn on the chart with the **Key levels** layer.
+
+**Settings → Notifications** connects Telegram (Bot API) and WhatsApp (Meta Cloud API). Messages are
+sent by the server through one `Notifier` (`apps/server/src/notify`), so alert rules only have to hand
+it a message; adding a channel is one sender in `channels.ts` plus its fields in the settings view.
+Tokens are stored in the local database and never returned by the API.
+
+**Settings → Alerts** holds the rules, evaluated on the server (`apps/server/src/alerts`) so they work
+with the browser closed:
+
+- **Price** – price trades through a level (Binance spot, checked about once per second); once or every time.
+- **Liquidations** – at least $X force-closed within N minutes on Binance + Bybit, longs, shorts or both.
+- **Reading** – the Today reading for a timeframe and horizon changes its lean or its edge (checked when a bar closes).
+
+A rule that fires is sent to every channel that is switched on and shown in the app if it is open.
 
 ## Data sources
 

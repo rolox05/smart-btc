@@ -481,7 +481,7 @@ function RelationsView({ metrics, relations, window, onWindow, onFocus, onSectio
       </Card>
 
       <Note>
-        {t('These are descriptions of the past, measured on the same data they describe, with overlapping {dur} windows. They show which way a reading has leaned, not a tested edge: the Ranking tab is the out-of-sample check. Relationships also change between periods, so compare "All history" with "Last 4 years".', { dur: horizon })}
+        {t('These are descriptions of the past, measured on the same data they describe, with overlapping {dur} windows. They show which way a reading has leaned, not a tested edge: the Ranking section of the Evidence tab is the out-of-sample check. Relationships also change between periods, so compare "All history" with "Last 4 years".', { dur: horizon })}
       </Note>
     </>
   );
@@ -528,7 +528,7 @@ function Method() {
           <li>{t('Check the Correlations section first: metrics that move together count as one vote, not several.')}</li>
           <li>{t('Look for agreement between metrics from different families (momentum, on-chain, derivatives positioning), which are less related.')}</li>
           <li>{t('Slow gauges (MVRV, drawdown from the high, halving cycle) describe the regime; fast ones (RSI, funding, divergences) describe timing inside it.')}</li>
-          <li>{t('Use the Ranking tab to see whether a combination actually held up out of sample before leaning on it.')}</li>
+          <li>{t('Use the Ranking section of the Evidence tab to see whether a combination actually held up out of sample before leaning on it.')}</li>
         </ul>
       </Card>
     </>
