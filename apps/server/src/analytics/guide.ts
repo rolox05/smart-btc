@@ -117,6 +117,18 @@ export const GUIDE: Record<string, NonNullable<MetricDef['guide']>> = {
     read: ['Days since the last 35% correction: a gauge of how long it has been since a major sell-off or the last bear leg.'],
     caveat: 'Only a few dozen such events exist in the whole history.',
   },
+  ddDays40: {
+    read: ['Days since the last 40% decline. Falls this deep have marked the hard corrections inside bull markets and the first legs of bear markets.'],
+    caveat: 'Fewer than forty such events exist in the whole history.',
+  },
+  ddDays45: {
+    read: ['Days since the last 45% decline: in practice, how long ago the last bear-market leg or crash was.'],
+    caveat: 'Fewer than thirty events, so the counter describes the cycle more than it predicts the coming weeks.',
+  },
+  ddDays50: {
+    read: ['Days since price last halved from a high. A halving has happened in every bear market so far; a long count means the market is far from its last one.'],
+    caveat: 'About two dozen events in the whole history: read it as context for where the cycle stands, not as a signal.',
+  },
   ddAth: {
     read: [
       'How far price is below its all-time high. Near 0%: price discovery. −20% to −40%: ordinary bull-market correction or early bear.',

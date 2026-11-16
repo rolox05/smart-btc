@@ -167,7 +167,7 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   series.set('mayer', mayer);
   features.set('mayer', ln(mayer));
 
-  for (const pct of [10, 15, 20, 25, 30, 35]) {
+  for (const pct of [10, 15, 20, 25, 30, 35, 40, 45, 50]) {
     const d = daysSinceDrawdown(h, l, c, pct / 100);
     series.set(`ddDays${pct}`, d);
     features.set(`ddDays${pct}`, map(d, (a) => Math.log1p(a)));
@@ -601,6 +601,9 @@ function describe(id: string, v: number, pct: number, t: T): { reading: string; 
     case 'ddDays25':
     case 'ddDays30':
     case 'ddDays35':
+    case 'ddDays40':
+    case 'ddDays45':
+    case 'ddDays50':
       return pct >= 90 ? r('Unusually long calm stretch') : v <= 3 ? r('Pullback just happened') : r('{n} days', 'neutral', { n: v.toFixed(0) });
     case 'exchNetflow':
       return v > 0 ? r('Net inflow to exchanges', 'bearish') : r('Net outflow from exchanges', 'bullish');

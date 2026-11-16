@@ -121,6 +121,24 @@ const CATALOGUE: MetricDef[] = [
     forecastable: true, defaultVisible: false, defaultInModel: false,
   },
   {
+    id: 'ddDays40', name: 'Days without a 40% pullback', short: 'No −40% for', group: 'drawdown',
+    description: 'Days since price last fell 40% from the high of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'dddays', unit: 'days', colorSlot: 5,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'ddDays45', name: 'Days without a 45% pullback', short: 'No −45% for', group: 'drawdown',
+    description: 'Days since price last fell 45% from the high of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'dddays', unit: 'days', colorSlot: 7,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'ddDays50', name: 'Days without a 50% pullback', short: 'No −50% for', group: 'drawdown',
+    description: 'Days since price last fell 50% from the high of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'dddays', unit: 'days', colorSlot: 3,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
     id: 'ddAth', name: 'Drawdown from all-time high', short: 'From ATH', group: 'drawdown',
     description: 'How far price sits below its all-time high.',
     source: 'Computed from daily highs', display: 'pane', pane: 'ddath', unit: 'pct', colorSlot: 7,
