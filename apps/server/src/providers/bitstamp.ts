@@ -1,6 +1,6 @@
 import type { Candle } from '@smart-btc/shared';
 import { fetchJson } from '../lib/http.js';
-import { HOUR, type Provider } from './types.js';
+import { DAY_SEC, HOUR, type Provider } from './types.js';
 
 interface OhlcResponse {
   data: { ohlc: { timestamp: string; open: string; high: string; low: string; close: string; volume: string }[] };
@@ -13,6 +13,7 @@ export const bitstamp: Provider = {
   name: 'Bitstamp',
   url: 'https://www.bitstamp.net/api/',
   provides: 'BTC/USD daily candles since 2011 (long history, fallback price feed)',
+  candles: [{ source: 'bitstamp', interval: '1d', barSec: DAY_SEC }],
   intervalMs: 6 * HOUR,
   async sync(store) {
     const last = await store.lastCandleT('bitstamp', '1d');

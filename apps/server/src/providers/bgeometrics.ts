@@ -1,6 +1,6 @@
 import { fetchJson } from '../lib/http.js';
 import type { Point } from '../store/store.js';
-import { HOUR, type Provider } from './types.js';
+import { DAY_SEC, HOUR, daily, type Provider } from './types.js';
 
 /**
  * bitcoin-data.com (BGeometrics) free tier: 10 requests/hour, 15/day, values delayed by 7 days.
@@ -19,6 +19,8 @@ export const bgeometrics: Provider = {
   name: 'BGeometrics (bitcoin-data.com)',
   url: 'https://bitcoin-data.com',
   provides: 'Short-term holder realized price and STH-SOPR (free tier is delayed 7 days)',
+  // The free tier runs a week behind, so a value is only late after about two weeks.
+  series: ENDPOINTS.map((e) => daily(e.series, { positive: true, maxAgeSec: 13 * DAY_SEC })),
   intervalMs: 24 * HOUR,
   async sync(store) {
     let written = 0;

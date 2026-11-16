@@ -279,12 +279,18 @@ function rowOf(feats: FeatureDef[], fit: Pick<Fit, 'mean' | 'sd'>, i: number, ou
  */
 function fitModels(ds: Dataset, prep: Prepared, feats: FeatureDef[], sigma: Float64Array, start: number, last: number, warm?: Fit): Fit | null {
   const F = feats.length;
-  const rows: number[] = [];
+  let rows: number[] = [];
   for (let i = start; i <= last; i++) {
     if (!Number.isNaN(prep.fwd[i]) && sigma[i] > 0 && !Number.isNaN(feats[0].col[i]) && !Number.isNaN(feats[2].col[i])) rows.push(i);
   }
+  if (rows.length < 300) return null;
+  // Neighbouring bars share most of their forward window, so long intraday histories are thinned to
+  // an evenly spaced subset: the fit sees the same episodes at a fraction of the cost.
+  if (rows.length > MAX_FIT_ROWS) {
+    const every = Math.ceil(rows.length / MAX_FIT_ROWS);
+    rows = rows.filter((_, k) => k % every === 0);
+  }
   const n = rows.length;
-  if (n < 300) return null;
   const mean = new Float64Array(F);
   const sd = new Float64Array(F);
   for (let f = 0; f < F; f++) {
@@ -422,6 +428,11 @@ class Score {
 }
 
 const MAX_EVALS = 500;
+/** Rows one regression is fitted on at most; the daily history stays below it, so only intraday is thinned. */
+const MAX_FIT_ROWS = 6000;
+/** The walk-forward hands the event loop back this often, so live prices and other requests keep flowing. */
+const YIELD_EVERY_MS = 25;
+const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
 /** Refit the regressions every this many evaluated bars. */
 const REFIT_EVERY = 25;
 
@@ -429,7 +440,7 @@ const REFIT_EVERY = 25;
  * Run the three models at the last closed bar and score them, with their consensus, on the same
  * walk-forward dates. `overlay` widens the consensus for scheduled events inside the horizon.
  */
-export function runModels(ds: Dataset, prep: Prepared, s: ForecastSettings, overlay: EventOverlay, t: T = EN): ModelsReport {
+export async function runModels(ds: Dataset, prep: Prepared, s: ForecastSettings, overlay: EventOverlay, t: T = EN): Promise<ModelsReport> {
   const H = s.horizon;
   const feats = featureDefs(ds, t);
   const sigma = new Float64Array(ds.n).fill(NaN);
@@ -464,7 +475,12 @@ export function runModels(ds: Dataset, prep: Prepared, s: ForecastSettings, over
   let sinceFit = REFIT_EVERY;
   let from = 0;
   let to = 0;
+  let lastYield = performance.now();
   for (let q = firstEval; q <= lastEval; q += step) {
+    if (performance.now() - lastYield > YIELD_EVERY_MS) {
+      await breathe();
+      lastYield = performance.now();
+    }
     const y = prep.fwd[q];
     if (Number.isNaN(y) || !(sigma[q] > 0)) continue;
     if (sinceFit >= REFIT_EVERY || !fit) {
@@ -495,6 +511,7 @@ export function runModels(ds: Dataset, prep: Prepared, s: ForecastSettings, over
 
   // ── today ──
   const qf = ds.lastClosed;
+  await breathe();
   const live = fitModels(ds, prep, feats, sigma, start, qf - H) ?? fit;
   const price = ds.c[ds.n - 1];
   const T = scenarioThreshold(ds, qf, s);

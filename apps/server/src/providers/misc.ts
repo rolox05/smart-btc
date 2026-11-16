@@ -1,12 +1,13 @@
 import { fetchJson } from '../lib/http.js';
 import type { Point } from '../store/store.js';
-import { HOUR, dayStart, type Provider } from './types.js';
+import { HOUR, daily, dayStart, type Provider } from './types.js';
 
 export const fearGreed: Provider = {
   id: 'alternative-me',
   name: 'alternative.me',
   url: 'https://alternative.me/crypto/fear-and-greed-index/',
   provides: 'Crypto Fear & Greed index since 2018',
+  series: [daily('fng', { positive: true, mayRepeat: true })],
   intervalMs: 6 * HOUR,
   async sync(store) {
     const res = await fetchJson<{ data: { value: string; timestamp: string }[] }>(
@@ -26,6 +27,7 @@ export const deribit: Provider = {
   name: 'Deribit',
   url: 'https://www.deribit.com',
   provides: 'DVOL 30-day implied volatility index since 2021',
+  series: [daily('deribit.dvol', { positive: true })],
   intervalMs: 2 * HOUR,
   async sync(store) {
     const last = await store.lastPointT('deribit.dvol');
@@ -53,6 +55,7 @@ export const defillama: Provider = {
   name: 'DefiLlama stablecoins',
   url: 'https://stablecoins.llama.fi',
   provides: 'Total USD stablecoin supply since 2017 (dry-powder proxy)',
+  series: [daily('llama.stables', { positive: true })],
   intervalMs: 12 * HOUR,
   async sync(store) {
     const res = await fetchJson<{ date: string; totalCirculatingUSD?: { peggedUSD?: number } }[]>(

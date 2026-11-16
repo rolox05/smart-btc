@@ -148,14 +148,15 @@ export function Slider({
   );
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Switch({ checked, onChange, label, bare, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; /** Show the switch alone; the label is still read out. */ bare?: boolean; disabled?: boolean }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 py-1 text-xs text-ink2">
-      <span>{label}</span>
+    <label className={clsx('flex cursor-pointer items-center justify-between gap-3 text-xs text-ink2', !bare && 'py-1', disabled && 'cursor-default opacity-50')}>
+      {!bare && <span>{label}</span>}
       <button
         role="switch"
         aria-checked={checked}
         aria-label={label}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx('relative h-4 w-7 shrink-0 rounded-full transition-colors', checked ? 'bg-accent' : 'bg-line')}
       >

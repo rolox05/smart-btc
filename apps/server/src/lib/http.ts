@@ -18,25 +18,29 @@ interface FetchOpts {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** GET a JSON document with a timeout and a small retry budget for transient failures. */
-export async function fetchJson<T>(url: string, opts: FetchOpts = {}): Promise<T> {
-  const { timeoutMs = 20_000, retries = 2, headers = {} } = opts;
+interface RequestOpts extends FetchOpts {
+  /** Sent as a JSON POST body when given. */
+  body?: unknown;
+}
+
+/** One request with a timeout and a small retry budget for transient failures. */
+async function request(url: string, opts: RequestOpts): Promise<Response> {
+  const { timeoutMs = 20_000, retries = 2, headers = {}, body } = opts;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': config.userAgent, Accept: 'application/json', ...headers },
+        method: body === undefined ? 'GET' : 'POST',
+        headers: { 'User-Agent': config.userAgent, Accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        const err = new HttpError(res.status, url, body);
-        // Client errors (incl. 429 rate limits and 451 geo blocks) will not improve by retrying now.
-        if (res.status < 500) throw err;
-        lastErr = err;
-      } else {
-        return (await res.json()) as T;
-      }
+      if (res.ok) return res;
+      const text = await res.text().catch(() => '');
+      const err = new HttpError(res.status, url, text);
+      // Client errors (incl. 429 rate limits and 451 geo blocks) will not improve by retrying now.
+      if (res.status < 500) throw err;
+      lastErr = err;
     } catch (err) {
       if (err instanceof HttpError && err.status < 500) throw err;
       lastErr = err;
@@ -44,6 +48,21 @@ export async function fetchJson<T>(url: string, opts: FetchOpts = {}): Promise<T
     if (attempt < retries) await sleep(600 * (attempt + 1));
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/** GET a JSON document. */
+export async function fetchJson<T>(url: string, opts: FetchOpts = {}): Promise<T> {
+  return (await (await request(url, opts)).json()) as T;
+}
+
+/** POST a JSON body and read a JSON answer. */
+export async function postJson<T>(url: string, body: unknown, opts: FetchOpts = {}): Promise<T> {
+  return (await (await request(url, { ...opts, body })).json()) as T;
+}
+
+/** GET a text document (CSV feeds). */
+export async function fetchText(url: string, opts: FetchOpts = {}): Promise<string> {
+  return (await request(url, { ...opts, headers: { Accept: 'text/csv,text/plain,*/*', ...opts.headers } })).text();
 }
 
 /** Try several base URLs in order and return the first that answers. */

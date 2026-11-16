@@ -292,16 +292,44 @@ export interface SeriesPayload {
 
 // ───────────────────────── data source status ─────────────────────────
 
+/** `good` passes, `warn` deserves a look, `bad` means the data should not be trusted, `unknown` could not be judged yet. */
+export type HealthGrade = 'good' | 'warn' | 'bad' | 'unknown';
+
+/** One test of a source's stored data. */
+export interface HealthCheck {
+  id: 'sync' | 'fresh' | 'gaps' | 'values' | 'agreement';
+  label: string;
+  grade: HealthGrade;
+  /** What was found, in a sentence. */
+  detail: string;
+}
+
+export interface SourceHealth {
+  /** 0-100; null while there is nothing to judge. */
+  score: number | null;
+  grade: HealthGrade;
+  checks: HealthCheck[];
+  checkedAt: number;
+}
+
 export interface SourceStatus {
   id: string;
   name: string;
   url: string;
   provides: string;
-  status: 'ok' | 'error' | 'pending' | 'stale';
+  /** `off` means the user switched the source off: it is not downloaded and its data is left out. */
+  status: 'ok' | 'error' | 'pending' | 'stale' | 'off';
   lastOk: number | null;
   lastAttempt: number | null;
   message: string;
   rows: number;
+  enabled: boolean;
+  /** Failed syncs in a row. */
+  failures: number;
+  /** Null while the source is off or has never synced. */
+  health: SourceHealth | null;
+  /** Short names of the metrics that depend on this source. */
+  feeds: string[];
 }
 
 // ───────────────────────── liquidity ─────────────────────────

@@ -12,6 +12,8 @@ export interface SyncState {
   status: 'ok' | 'error' | 'pending';
   message: string;
   rows: number;
+  /** Failed syncs in a row; back to zero on the next success. */
+  failures: number;
 }
 
 /**
@@ -26,7 +28,6 @@ export interface Store {
   upsertPoints(series: string, points: Point[]): Promise<number>;
   getPoints(series: string, fromT?: number): Promise<Point[]>;
   lastPointT(series: string): Promise<number | null>;
-  countPoints(prefix: string): Promise<number>;
 
   /** Forced liquidations collected from the exchange websockets (times in milliseconds). */
   addLiquidations(rows: LiquidationPrint[]): Promise<number>;
@@ -45,6 +46,9 @@ export interface Store {
   saveReading(series: string, asOf: number, json: string): Promise<void>;
   /** The latest reading of the series saved for a bar before `asOf`. */
   previousReading(series: string, asOf: number): Promise<string | null>;
+
+  /** Drops rows older than the given times (liquidations and notifications in ms, readings in seconds). Returns rows removed. */
+  prune(before: { liquidationsMs: number; notificationsMs: number; readingsSec: number }): Promise<number>;
 
   getSyncStates(): Promise<SyncState[]>;
   setSyncState(state: SyncState): Promise<void>;

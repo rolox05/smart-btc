@@ -31,6 +31,7 @@ const LABEL_FIELDS = {
 const IGNORE = new Set([
   ', ', '; ', 'en-US', 'numeric', 'buy-side', 'rally', 'bullish', 'bearish', 'neutral', 'num text-ink', 'num text-ink2',
   'cone', 'swings', 'targets', 'walls', 'liquidations',
+  'Coinbase', 'Kraken', 'OKX', 'FRED', 'Blockchain.com', 'mempool.space', 'bitstamp', 'coinbase', 'kraken', 'warn', '?',
   'Binance', 'BGeometrics', 'Coin Metrics', 'DefiLlama', 'Deribit', 'alternative.me', 'Bybit', 'Hyperliquid', 'Yahoo Finance', 'CFTC',
 ]);
 /** Short identifiers that are real keys even though they look like code. */

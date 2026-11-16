@@ -13,16 +13,28 @@ import { LiquidationStream } from './providers/liquidationStream.js';
 import { PriceStream } from './providers/priceStream.js';
 import { Notifier } from './notify/notifier.js';
 import { SettingsService } from './settings.js';
-import { registerSettingsRoutes } from './settingsRoutes.js';
+import { isLocalOrigin, registerSettingsRoutes } from './settingsRoutes.js';
+import { HealthService } from './sources/health.js';
+import { SourcePrefs, visibleStore } from './sources/prefs.js';
 import { SyncService } from './sync.js';
 
 const app = Fastify({ logger: { level: 'warn' } });
-await app.register(cors, { origin: true });
+// Only pages served from this computer (or an origin named in ALLOWED_ORIGINS) may read the API from a browser.
+await app.register(cors, { origin: (origin, cb) => cb(null, isLocalOrigin(origin) || config.allowedOrigins.includes(origin ?? '')) });
 
 const store = openSqliteStore(config.dataDir);
-const datasets = new DatasetService(store);
-const sync = new SyncService(store, (msg) => console.log(`[sync] ${msg}`));
+const sources = new SourcePrefs(store);
+await sources.load();
+// Analytics read through a view that leaves out switched-off sources; downloads use the real store.
+const visible = visibleStore(store, sources);
+const health = new HealthService(store, sources);
+const datasets = new DatasetService(visible);
+const sync = new SyncService(store, (msg) => console.log(`[sync] ${msg}`), sources, health);
 sync.onData(() => datasets.invalidate());
+sources.onChange(() => {
+  datasets.invalidate();
+  health.invalidate();
+});
 
 const liquidations = new LiquidationStream(store, (msg) => console.log(`[stream] ${msg}`));
 const prices = new PriceStream((msg) => console.log(`[stream] ${msg}`));
@@ -30,7 +42,7 @@ const prices = new PriceStream((msg) => console.log(`[stream] ${msg}`));
 const settings = new SettingsService(store);
 const notifier = new Notifier(settings, store, undefined, (msg) => console.log(`[notify] ${msg}`));
 
-const compute = registerRoutes(app, datasets, sync, { store, liquidations, prices });
+const compute = registerRoutes(app, datasets, sync, { store: visible, liquidations, prices, sources });
 registerSettingsRoutes(app, { settings, notifier, store });
 
 const alerts = new AlertEngine({ store, notify: (m) => notifier.notify(m), today: compute.today, log: (msg) => console.log(`[alert] ${msg}`) });

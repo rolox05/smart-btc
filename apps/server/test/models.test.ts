@@ -67,10 +67,10 @@ test('fitQuantile: the spread between quantiles follows an input that drives vol
   assert.ok(lo[1] < -0.5 && hi[1] > 0.5, `slopes ${lo[1]} / ${hi[1]}`);
 });
 
-test('models: all three run on synthetic data, are coherent, and claim no edge on noise', () => {
+test('models: all three run on synthetic data, are coherent, and claim no edge on noise', async () => {
   const ds = syntheticDataset(2600, 21);
   const s = settings({ horizon: 14 });
-  const r = runModels(ds, prepare(ds, 14), s, NO_EVENTS);
+  const r = await runModels(ds, prepare(ds, 14), s, NO_EVENTS);
   assert.equal(r.models.length, 4);
   assert.ok(r.evaluations > 100);
   for (const m of r.models) {
@@ -82,26 +82,26 @@ test('models: all three run on synthetic data, are coherent, and claim no edge o
   }
 });
 
-test('models: scheduled events widen the consensus without moving its centre', () => {
+test('models: scheduled events widen the consensus without moving its centre', async () => {
   const ds = syntheticDataset(2000, 21);
   const s = settings({ horizon: 14 });
   const prep = prepare(ds, 14);
-  const plain = runModels(ds, prep, s, NO_EVENTS).adjusted;
-  const wide = runModels(ds, prep, s, { spreadMultiplier: 1.3, events: [] }).adjusted;
+  const plain = (await runModels(ds, prep, s, NO_EVENTS)).adjusted;
+  const wide = (await runModels(ds, prep, s, { spreadMultiplier: 1.3, events: [] })).adjusted;
   assert.ok(Math.abs(wide.q50 - plain.q50) < 1e-9);
   assert.ok(wide.q90 > plain.q90 && wide.q10 < plain.q10);
 });
 
-test('models: the forecast at the last closed bar ignores the forming bar', () => {
+test('models: the forecast at the last closed bar ignores the forming bar', async () => {
   const ds = syntheticDataset(2000, 21);
   const s = settings({ horizon: 14 });
-  const a = runModels(ds, prepare(ds, 14), s, NO_EVENTS);
+  const a = await runModels(ds, prepare(ds, 14), s, NO_EVENTS);
   // Same history, but the last bar is still open and has moved a lot.
   const open = { ...ds, c: Float64Array.from(ds.c), lastClosed: ds.n - 2 };
   const closed = { ...ds, lastClosed: ds.n - 2 };
   open.c[ds.n - 1] *= 1.2;
-  const b = runModels(open, prepare(open, 14), s, NO_EVENTS);
-  const c = runModels(closed, prepare(closed, 14), s, NO_EVENTS);
+  const b = await runModels(open, prepare(open, 14), s, NO_EVENTS);
+  const c = await runModels(closed, prepare(closed, 14), s, NO_EVENTS);
   assert.notEqual(a.asOf, b.asOf);
   for (let k = 0; k < 4; k++) assert.equal(b.models[k].pUp, c.models[k].pUp);
 });

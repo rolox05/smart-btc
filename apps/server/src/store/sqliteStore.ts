@@ -43,6 +43,9 @@ export function openSqliteStore(dataDir: string): Store {
   const db = new DatabaseSync(join(dataDir, 'smart-btc.db'));
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
   db.exec(SCHEMA);
+  // Columns added after the first release.
+  const syncCols = (db.prepare('PRAGMA table_info(sync_state)').all() as { name: string }[]).map((c) => c.name);
+  if (!syncCols.includes('failures')) db.exec('ALTER TABLE sync_state ADD COLUMN failures INTEGER NOT NULL DEFAULT 0');
 
   const insCandle = db.prepare(
     `INSERT INTO candles (source, interval, t, o, h, l, c, v) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -57,7 +60,6 @@ export function openSqliteStore(dataDir: string): Store {
   );
   const selPoints = db.prepare('SELECT t, v FROM points WHERE series = ? AND t >= ? ORDER BY t');
   const selLastPoint = db.prepare('SELECT MAX(t) AS t FROM points WHERE series = ?');
-  const cntPoints = db.prepare("SELECT COUNT(*) AS n FROM points WHERE series LIKE ? || '%'");
   const insLiq = db.prepare('INSERT INTO liquidations (t, venue, side, price, usd) VALUES (?, ?, ?, ?, ?)');
   const selLiq = db.prepare('SELECT t, venue, side, price, usd FROM liquidations WHERE t >= ? ORDER BY t');
   const selFirstLiq = db.prepare('SELECT MIN(t) AS t FROM liquidations');
@@ -67,11 +69,14 @@ export function openSqliteStore(dataDir: string): Store {
   const selNotes = db.prepare('SELECT at, channel, kind, title, ok, error FROM notification_log ORDER BY at DESC LIMIT ?');
   const upReading = db.prepare('INSERT INTO readings (series, as_of, json) VALUES (?, ?, ?) ON CONFLICT (series, as_of) DO UPDATE SET json = excluded.json');
   const selPrevReading = db.prepare('SELECT json FROM readings WHERE series = ? AND as_of < ? ORDER BY as_of DESC LIMIT 1');
-  const selSync = db.prepare('SELECT provider, last_ok, last_attempt, status, message, rows FROM sync_state');
+  const delLiq = db.prepare('DELETE FROM liquidations WHERE t < ?');
+  const delNotes = db.prepare('DELETE FROM notification_log WHERE at < ?');
+  const delReadings = db.prepare('DELETE FROM readings WHERE as_of < ?');
+  const selSync = db.prepare('SELECT provider, last_ok, last_attempt, status, message, rows, failures FROM sync_state');
   const upSync = db.prepare(
-    `INSERT INTO sync_state (provider, last_ok, last_attempt, status, message, rows) VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO sync_state (provider, last_ok, last_attempt, status, message, rows, failures) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (provider) DO UPDATE SET last_ok = excluded.last_ok, last_attempt = excluded.last_attempt,
-       status = excluded.status, message = excluded.message, rows = excluded.rows`,
+       status = excluded.status, message = excluded.message, rows = excluded.rows, failures = excluded.failures`,
   );
 
   const tx = <T>(fn: () => T): T => {
@@ -113,9 +118,6 @@ export function openSqliteStore(dataDir: string): Store {
     async lastPointT(series) {
       return ((selLastPoint.get(series) as { t: number | null } | undefined)?.t ?? null) as number | null;
     },
-    async countPoints(prefix) {
-      return Number((cntPoints.get(prefix) as { n: number }).n);
-    },
     async addLiquidations(rows) {
       tx(() => {
         for (const r of rows) insLiq.run(r.t, r.venue, r.side, r.price, r.usd);
@@ -153,6 +155,10 @@ export function openSqliteStore(dataDir: string): Store {
     async previousReading(series, asOf) {
       return ((selPrevReading.get(series, asOf) as { json: string } | undefined)?.json ?? null) as string | null;
     },
+    async prune(before) {
+      const removed = [delLiq.run(before.liquidationsMs), delNotes.run(before.notificationsMs), delReadings.run(before.readingsSec)];
+      return removed.reduce((a, r) => a + Number(r.changes), 0);
+    },
     async getSyncStates() {
       return (selSync.all() as unknown as Record<string, unknown>[]).map((r) => ({
         provider: String(r.provider),
@@ -161,10 +167,11 @@ export function openSqliteStore(dataDir: string): Store {
         status: r.status as SyncState['status'],
         message: String(r.message),
         rows: Number(r.rows),
+        failures: Number(r.failures ?? 0),
       }));
     },
     async setSyncState(s) {
-      upSync.run(s.provider, s.lastOk, s.lastAttempt, s.status, s.message, s.rows);
+      upSync.run(s.provider, s.lastOk, s.lastAttempt, s.status, s.message, s.rows, s.failures);
     },
     async close() {
       db.close();

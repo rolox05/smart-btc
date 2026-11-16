@@ -1,7 +1,7 @@
-import { fetchJson } from '../lib/http.js';
+import { fetchJson, postJson } from '../lib/http.js';
 import type { Point } from '../store/store.js';
 import { BINANCE_FUTURES } from './binance.js';
-import { HOUR, MINUTE, dayStart, type Provider } from './types.js';
+import { DAY_SEC, HOUR, MINUTE, daily, dayStart, type Provider } from './types.js';
 
 const DAY_MS = 86_400_000;
 
@@ -9,6 +9,9 @@ const DAY_MS = 86_400_000;
 
 interface BybitOi {
   result: { list: { openInterest: string; timestamp: string }[]; nextPageCursor?: string };
+}
+interface BybitFunding {
+  result: { list: { fundingRate: string; fundingRateTimestamp: string }[] };
 }
 interface BybitRatio {
   result: { list: { buyRatio: string; sellRatio: string; timestamp: string }[] };
@@ -22,7 +25,12 @@ export const bybit: Provider = {
   id: 'bybit',
   name: 'Bybit',
   url: 'https://api.bybit.com',
-  provides: 'BTCUSDT perpetual open interest and long/short account ratio, daily since 2020',
+  provides: 'BTCUSDT perpetual open interest, long/short account ratio and funding rate since 2020',
+  series: [
+    daily('bybit.oi', { positive: true }),
+    daily('bybit.lsRatio', { positive: true }),
+    { id: 'bybit.funding', everySec: 8 * 3600, mayRepeat: true, additive: true },
+  ],
   intervalMs: 30 * MINUTE,
   async sync(store) {
     let written = 0;
@@ -60,6 +68,21 @@ export const bybit: Provider = {
       written += await store.upsertPoints('bybit.lsRatio', pts);
       start = end + 1;
     }
+
+    // Funding: newest first, 200 settlements a page; walk back until the stored history is reached.
+    const lastFunding = await store.lastPointT('bybit.funding');
+    let endTime = stop;
+    for (let page = 0; page < 60; page++) {
+      const res = await fetchJson<BybitFunding>(
+        `https://api.bybit.com/v5/market/funding/history?category=linear&symbol=BTCUSDT&limit=200&endTime=${endTime}`,
+      );
+      const rows = res.result.list;
+      if (!rows.length) break;
+      written += await store.upsertPoints('bybit.funding', rows.map((r) => ({ t: Math.floor(+r.fundingRateTimestamp / 1000), v: +r.fundingRate })));
+      const oldest = Math.min(...rows.map((r) => +r.fundingRateTimestamp));
+      if (rows.length < 200 || (lastFunding != null && oldest <= lastFunding * 1000)) break;
+      endTime = oldest - 1;
+    }
     return written;
   },
 };
@@ -73,6 +96,7 @@ export const binancePremium: Provider = {
   name: 'Binance premium index',
   url: 'https://fapi.binance.com',
   provides: 'Perpetual premium over spot (daily since Dec 2019)',
+  series: [daily('binance.premium', { additive: true })],
   intervalMs: HOUR,
   async sync(store) {
     const last = await store.lastPointT('binance.premium');
@@ -112,6 +136,8 @@ export const yahoo: Provider = {
   name: 'Yahoo Finance',
   url: 'https://finance.yahoo.com',
   provides: 'US dollar index, 10-year Treasury yield, Nasdaq, gold and IBIT spot-ETF volume (daily since 2010)',
+  // Markets close at weekends and holidays, so about two days in three carry a value.
+  series: YAHOO.map((y) => daily(y.series, { positive: true, duty: 0.66, maxAgeSec: 5 * DAY_SEC })),
   intervalMs: 3 * HOUR,
   async sync(store) {
     let written = 0;
@@ -157,6 +183,7 @@ export const cftc: Provider = {
   name: 'CFTC Commitments of Traders',
   url: 'https://publicreporting.cftc.gov',
   provides: 'Weekly CME Bitcoin futures positioning of leveraged funds and asset managers since 2018',
+  series: ['cftc.levNet', 'cftc.assetNet'].map((id) => ({ id, everySec: 7 * DAY_SEC, maxAgeSec: 16 * DAY_SEC, additive: true })),
   intervalMs: 12 * HOUR,
   async sync(store) {
     const rows = await fetchJson<TffRow[]>(
@@ -188,6 +215,7 @@ export const deribitOptions: Provider = {
   name: 'Deribit options',
   url: 'https://www.deribit.com',
   provides: 'BTC options put/call open-interest ratio (live; history builds up locally)',
+  series: [daily('deribit.putCall', { positive: true })],
   intervalMs: HOUR,
   async sync(store) {
     const res = await fetchJson<BookSummary>('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
@@ -215,20 +243,14 @@ export const hyperliquid: Provider = {
   name: 'Hyperliquid',
   url: 'https://hyperliquid.xyz',
   provides: 'Hourly BTC perpetual funding on Hyperliquid since May 2023',
+  series: [{ id: 'hl.funding', everySec: 3600, mayRepeat: true, additive: true }],
   intervalMs: HOUR,
   async sync(store) {
     const last = await store.lastPointT('hl.funding');
     let start = last != null ? (last + 1) * 1000 : Date.UTC(2023, 4, 1);
     let written = 0;
     for (let page = 0; page < 200; page++) {
-      const res = await fetch('https://api.hyperliquid.xyz/info', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ type: 'fundingHistory', coin: 'BTC', startTime: start }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} from api.hyperliquid.xyz`);
-      const rows = (await res.json()) as HlFunding[];
+      const rows = await postJson<HlFunding[]>('https://api.hyperliquid.xyz/info', { type: 'fundingHistory', coin: 'BTC', startTime: start });
       if (!rows.length) break;
       written += await store.upsertPoints(
         'hl.funding',

@@ -750,6 +750,22 @@ const dict: Dict = {
   "Drag to move the {name} chart": "Arraste para mover o gráfico {name}",
   "Drag to move this chart": "Arraste para mover este gráfico",
   "{n} metrics": "{n} métricas",
+  "Each source is checked for failed downloads, late or missing values, impossible or stuck values, and disagreement with other sources. Switch a source off to stop downloading it and leave its data out of every chart and model; what it already stored is kept.": "Cada fonte é verificada quanto a downloads com falha, valores atrasados ou ausentes, valores impossíveis ou travados, e divergência com outras fontes. Desligue uma fonte para parar de baixá-la e deixar seus dados fora de todos os gráficos e modelos; o que ela já salvou é mantido.",
+  "Feeds:": "Alimenta:",
+  "Left out while off:": "Fora enquanto estiver desligada:",
+  "Health checks": "Verificações de saúde",
+  "Health score, 0 to 100, from the checks below": "Pontuação de saúde, de 0 a 100, a partir das verificações abaixo",
+  "Healthy": "Saudável",
+  "Needs a look": "Requer atenção",
+  "Looks corrupt": "Parece corrompida",
+  "Not judged yet": "Ainda não avaliada",
+  "Switched off": "Desligada",
+  "Use {name}": "Usar {name}",
+  "{names} failed its checks. Look at the details below and consider switching it off until it recovers.": "{names} não passou nas verificações. Veja os detalhes abaixo e considere desligá-la até que se recupere.",
+  "{n} healthy": "{n} saudáveis",
+  "{n} need a look": "{n} requerem atenção",
+  "{n} look corrupt": "{n} parecem corrompidas",
+  "{n} switched off": "{n} desligadas",
 };
 
 export default dict;

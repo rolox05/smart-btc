@@ -1,6 +1,6 @@
 import { fetchJson } from '../lib/http.js';
 import type { Point } from '../store/store.js';
-import { HOUR, type Provider } from './types.js';
+import { HOUR, daily, type Provider } from './types.js';
 
 /** Metrics available on the free community tier, mapped to local series ids. */
 const METRICS: Record<string, string> = {
@@ -28,6 +28,7 @@ export const coinmetrics: Provider = {
   name: 'Coin Metrics Community',
   url: 'https://community-api.coinmetrics.io',
   provides: 'MVRV / realized price, market cap, supply, exchange flows and balances, issuance, fees, transactions, hash rate since 2010',
+  series: Object.values(METRICS).map((id) => daily(id, { positive: true })),
   intervalMs: 6 * HOUR,
   async sync(store) {
     // Start from the series that is furthest behind, so fields added later get their full history.

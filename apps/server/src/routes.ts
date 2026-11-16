@@ -34,6 +34,8 @@ import { ForecastError, runForecast } from './forecast/forecast.js';
 import { runTradeSetup } from './forecast/tradeSetup.js';
 import { fetchJsonAny, ttlCache } from './lib/http.js';
 import { BINANCE_SPOT_HOSTS } from './providers/binance.js';
+import { isLocalOrigin } from './settingsRoutes.js';
+import { SourceRuleError, type SourcePrefs } from './sources/prefs.js';
 import type { SyncService } from './sync.js';
 
 const tfSchema = z.enum(TIMEFRAMES).default('1d');
@@ -86,6 +88,8 @@ class ResultCache {
     const value = compute();
     if (this.map.size >= 240) this.map.delete(this.map.keys().next().value as string);
     this.map.set(key, value);
+    // A pending computation is shared by everyone who asks meanwhile; a failed one is not kept.
+    if (value instanceof Promise) value.catch(() => this.map.get(key) === value && this.map.delete(key));
     return value;
   }
 }
@@ -94,15 +98,19 @@ export function registerRoutes(
   app: FastifyInstance,
   datasets: DatasetService,
   sync: SyncService,
-  live: { store: Store; liquidations: LiquidationStream; prices: PriceStream },
+  live: { store: Store; liquidations: LiquidationStream; prices: PriceStream; sources: SourcePrefs },
 ) {
   const prepared = new PreparedCache();
   const results = new ResultCache();
 
   const dataset = async (tf: Timeframe = '1d', t?: T): Promise<Dataset> => {
     const tr = t ?? makeT('en');
+    const intraday = tf === '15m' || tf === '1h' || tf === '4h';
+    if (intraday && !live.sources.isEnabled(`binance-${tf}`)) {
+      throw Object.assign(new Error(tr('The {tf} candle source is switched off. Switch it back on under Data sources.', { tf })), { statusCode: 409 });
+    }
     // Intraday history is paged in from the oldest bar, so it is only usable once a sync has completed.
-    if ((tf === '15m' || tf === '1h' || tf === '4h') && !(await sync.everSynced(`binance-${tf}`))) {
+    if (intraday && !(await sync.everSynced(`binance-${tf}`))) {
       throw new NotReady(tr('Downloading {tf} candles for the first time. This takes up to a minute.', { tf }));
     }
     const ds = await datasets.get(tf);
@@ -112,7 +120,7 @@ export function registerRoutes(
   /** Translator for the language the client asked for. */
   const trOf = (req: Parameters<typeof langOf>[0]) => makeT(langOf(req));
   /** Cache key that changes with the data of a timeframe (bar count and last bar), not on every tick. */
-  const stamp = (ds: Dataset) => `${ds.tf}:${ds.t[ds.n - 1]}:${ds.n}`;
+  const stamp = (ds: Dataset) => `${ds.tf}:${ds.t[ds.n - 1]}:${ds.n}:${live.sources.key}`;
 
   app.setErrorHandler((err: Error, _req, reply) => {
     if (err instanceof NotReady) return reply.status(503).send({ error: err.message, code: 'not_ready' });
@@ -146,9 +154,27 @@ export function registerRoutes(
 
   app.get('/api/sources', async (req) => sync.status(trOf(req)));
 
+  // A long first download keeps running in the background; the answer does not wait for it.
+  const REFRESH_WAIT_MS = 8_000;
   app.post('/api/refresh', async (req) => {
-    await sync.runDue(true);
+    await Promise.race([sync.runDue(true), new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_MS))]);
     return sync.status(trOf(req));
+  });
+
+  // Switch one source on or off. Off: no more downloads, and its stored data is left out everywhere.
+  app.put('/api/sources/:id', async (req) => {
+    if (!isLocalOrigin(req.headers.origin)) throw Object.assign(new Error('Settings are only available from this computer.'), { statusCode: 403 });
+    const { id } = z.object({ id: z.string().max(60) }).parse(req.params);
+    const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+    const t = trOf(req);
+    try {
+      await live.sources.setEnabled(id, enabled);
+    } catch (err) {
+      if (err instanceof SourceRuleError) throw Object.assign(new Error(t(err.message)), { statusCode: 409 });
+      throw err;
+    }
+    if (enabled) void sync.runNow(id);
+    return sync.status(t);
   });
 
   app.get('/api/candles', async (req) => {
@@ -281,7 +307,7 @@ export function registerRoutes(
     const daily = await dataset('1d', t);
     const events = await eventData(daily, t);
     const overlay = eventOverlay(events.upcoming, events.studies, Math.floor(Date.now() / 1000), settings.horizon * ds.barDays);
-    const report = results.get(`m:${t.lang}:${stamp(ds)}:${JSON.stringify(settings)}:${overlay.spreadMultiplier.toFixed(3)}`, () =>
+    const report = await results.get(`m:${t.lang}:${stamp(ds)}:${JSON.stringify(settings)}:${overlay.spreadMultiplier.toFixed(3)}`, () =>
       runModels(ds, prepared.get(ds, settings.horizon), settings, overlay, t),
     );
     return { ds, daily, events, report };

@@ -159,6 +159,27 @@ export const GUIDE: Record<string, NonNullable<MetricDef['guide']>> = {
     ],
     caveat: 'Each halving cuts issuance in half, so readings shift abruptly around halvings, and fees play a growing role.',
   },
+  hashRibbon: {
+    read: [
+      'Hash rate is the computing power securing the network. When the 30-day average falls below the 60-day average (ribbon under 1), miners are switching machines off because mining stopped paying.',
+      'Those stretches have tended to come late in sell-offs. The ribbon climbing back above 1 has historically marked the end of the miner squeeze.',
+    ],
+    caveat: 'Hash rate is estimated from how fast blocks arrive, so it is noisy day to day; heat waves, floods and regulation switch miners off too. Only a handful of clear signals exist.',
+  },
+  cbPremium: {
+    read: [
+      'Positive: bitcoin costs more on Coinbase than on Binance, which happens when US funds and institutions are the eager buyers.',
+      'Negative: the selling is coming from the US side. Sustained discounts have accompanied weak stretches.',
+    ],
+    caveat: 'It also contains the tether-to-dollar exchange rate: when tether drifts from one dollar the premium moves with no change in demand. Arbitrage keeps it within a few hundredths of a percent most days, so small readings mean little.',
+  },
+  netLiquidity: {
+    read: [
+      'Rising: the Fed is adding reserves, or the Treasury and the reverse-repo facility are releasing cash into markets. Risk assets, bitcoin included, have tended to do better in those periods.',
+      'Falling: dollars are being drained from the system, a headwind for risk assets.',
+    ],
+    caveat: 'A slow, weekly figure and a popular but crude formula. It describes the climate over months and says nothing about this week. The model uses its 90-day change.',
+  },
   exSupply: {
     read: [
       'Share of all coins sitting in known exchange wallets. A steady decline means holders are moving coins into self-custody, which shrinks readily sellable supply.',

@@ -156,13 +156,35 @@ A rule that fires is sent to every channel that is switched on and shown in the 
 | Deribit | DVOL implied volatility | Since 2021 |
 | alternative.me | Fear & Greed index | Since 2018 |
 | DefiLlama | Total stablecoin supply | Since 2017 |
-| Coinbase, Kraken | Order book depth | |
-| Bybit | Open interest and long/short account ratio | Daily since 2020 |
+| Coinbase | Daily candles since 2015: price cross-check, stand-in price history, Coinbase premium; order book | |
+| Kraken | Daily candles for the last two years: price cross-check; order book | |
+| OKX | Perpetual funding rate (third venue for the funding cross-check) | About three months upstream; history accumulates locally |
+| Blockchain.com | Hash rate and transaction count: cross-checks Coin Metrics and stands in for it | Since 2009 |
+| mempool.space | Hash rate (third estimate) | Since 2009 |
+| FRED (St. Louis Fed) | Fed balance sheet, Treasury account, reverse repo (net dollar liquidity); 10-year yield cross-check | Weekly figures are stored on their publication day |
+| Bybit | Open interest, long/short account ratio, funding rate | Since 2020 |
 | Binance premium index | Perpetual premium over spot | Daily since Dec 2019 |
 | Hyperliquid | Funding on the largest on-chain perpetuals exchange | Hourly since May 2023 |
 | Deribit options | Put/call open-interest ratio | Live only; history builds up locally |
 | CFTC Commitments of Traders | CME Bitcoin futures positioning (leveraged funds, asset managers) | Weekly since 2018, stored on the publication day |
 | Yahoo Finance | US dollar index, 10-year yield, Nasdaq, gold, IBIT ETF volume | Daily since 2010 (IBIT since 2024); unofficial endpoint |
+
+### Switching sources off, and data health
+
+Settings → Data sources lists every source with a switch and a health score (0–100).
+
+- **Off** means the source is no longer downloaded and what it stored is left out of every chart,
+  reading and model; the stored data is kept, so switching it back on resumes where it stopped.
+  Metrics with a stand-in keep working (price history: Binance → Bitstamp → Coinbase → Kraken;
+  funding: Binance → Bybit → OKX; transactions and hash rate: Coin Metrics → Blockchain.com →
+  mempool.space; 10-year yield: Yahoo → FRED). The last price source cannot be switched off.
+- **Health** is computed from the stored data (`apps/server/src/sources/health.ts`): failed downloads
+  in a row, a newest value older than the source's rhythm allows, missing values in the recent
+  window, impossible / non-positive / stuck values and ticks that jump out of line and straight
+  back, and agreement with other sources reading the same quantity (daily close across five
+  sources, funding across three venues, hash rate across three estimates, transactions, 10-year
+  yield). With three or more sources the odd one out is flagged; with two, both get a warning.
+  Nothing is switched off automatically.
 
 Delayed series are lagged by the same amount inside the model, so the backtest only ever sees
 what would have been available live.
@@ -180,6 +202,7 @@ apps/server
   src/providers      One file per data source (incremental sync into the store)
   src/store          Persistence interface + SQLite implementation
   src/sync.ts        Scheduler: runs providers when due, tracks their status
+  src/sources        Source on/off preferences and data-health checks
   src/analytics      Indicators, metric catalogue, aligned daily dataset, liquidity analysis
   src/forecast       Analog model, forecast, walk-forward backtest, trade-setup simulator
   src/routes.ts      HTTP API (validated with zod)
@@ -192,6 +215,8 @@ apps/web
 ### Extending it
 
 - **New data source:** add a provider in `apps/server/src/providers` and register it in `index.ts`.
+  List the series or candles it writes (`series` / `candles`) so the health checks and the on/off
+  switch cover it.
 - **New metric:** describe it in `analytics/metrics.ts` and compute it in `analytics/dataset.ts`
   (plus a model transform if it should be usable as an input). The UI and the model pick it up.
 - **Scaling beyond one machine:** the `Store` interface is async and can be re-implemented on

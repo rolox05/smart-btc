@@ -10,6 +10,8 @@ export const config = {
   host: process.env.API_HOST ?? '127.0.0.1',
   dataDir: process.env.DATA_DIR ?? resolve(repoRoot, 'data'),
   webDist: resolve(repoRoot, 'apps/web/dist'),
+  /** Extra browser origins allowed to call the API (comma separated), for when it is not opened on this computer. */
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
   userAgent: 'smart-btc/0.1 (local research tool)',
   /** Set SYNC=off to serve only what is already in the local database. */
   syncEnabled: (process.env.SYNC ?? 'on') !== 'off',

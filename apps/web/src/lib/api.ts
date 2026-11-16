@@ -84,5 +84,6 @@ export const api = {
   notifications: () => call<NotificationDelivery[]>('/api/notifications'),
   testNotification: (channel: ChannelId) => call<NotificationDelivery>('/api/notifications/test', { channel }),
   liquidations: () => call<LiquidationFeed>('/api/liquidations'),
+  setSourceEnabled: (id: string, enabled: boolean) => call<SourceStatus[]>(`/api/sources/${encodeURIComponent(id)}`, { enabled }, 'PUT'),
   refresh: () => call<SourceStatus[]>('/api/refresh', {}),
 };

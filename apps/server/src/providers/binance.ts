@@ -1,7 +1,7 @@
 import type { Candle } from '@smart-btc/shared';
 import { fetchJson, fetchJsonAny } from '../lib/http.js';
 import type { Point } from '../store/store.js';
-import { MINUTE, type Provider } from './types.js';
+import { DAY_SEC, MINUTE, daily, type Provider } from './types.js';
 
 /** api.binance.com is geo-blocked in some countries; data-api.binance.vision is the public mirror. */
 export const BINANCE_SPOT_HOSTS = ['https://api.binance.com', 'https://data-api.binance.vision'];
@@ -20,6 +20,7 @@ export const binanceSpot: Provider = {
   name: 'Binance spot',
   url: 'https://api.binance.com',
   provides: 'BTC/USDT daily candles since 2017, live price',
+  candles: [{ source: 'binance', interval: '1d', barSec: DAY_SEC }],
   intervalMs: 3 * MINUTE,
   async sync(store) {
     const last = await store.lastCandleT('binance', '1d');
@@ -48,6 +49,7 @@ function intradayProvider(interval: '15m' | '1h' | '4h', barSec: number, history
     url: 'https://api.binance.com',
     provides: 'BTC/USDT {interval} candles ({span}) for the {interval} timeframe',
     providesVars: { interval, span },
+    candles: [{ source: 'binance', interval, barSec }],
     intervalMs: 2 * MINUTE,
     async sync(store) {
       const last = await store.lastCandleT('binance', interval);
@@ -89,6 +91,11 @@ export const binanceFutures: Provider = {
   name: 'Binance USD-M futures',
   url: 'https://fapi.binance.com',
   provides: 'Perp funding rate since 2019, open interest and long/short ratio (30-day window, accumulated locally)',
+  series: [
+    { id: 'binance.funding', everySec: 8 * 3600, mayRepeat: true, additive: true },
+    daily('binance.oi', { positive: true }),
+    daily('binance.lsRatio', { positive: true }),
+  ],
   intervalMs: 30 * MINUTE,
   async sync(store) {
     let written = 0;

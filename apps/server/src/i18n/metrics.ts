@@ -300,6 +300,36 @@ const es: Record<string, MetricText> = {
     ],
     caveat: 'Cada halving reduce la emisión a la mitad, así que las lecturas cambian bruscamente en torno a los halvings, y las comisiones pesan cada vez más.',
   },
+  hashRibbon: {
+    name: 'Cinta de hash (tasa de hash 30d ÷ 60d)',
+    short: 'Cinta de hash',
+    description: 'La media de 30 días de la tasa de hash de la red dividida por su media de 60 días. Por debajo de 1 la red se encoge: los mineros están apagando máquinas.',
+    read: [
+      'La tasa de hash es la potencia de cómputo que asegura la red. Cuando la media de 30 días cae por debajo de la de 60 (cinta bajo 1), los mineros apagan máquinas porque minar dejó de ser rentable.',
+      'Esos tramos han tendido a llegar tarde en las caídas. Que la cinta vuelva a subir por encima de 1 ha marcado históricamente el fin del apretón de los mineros.',
+    ],
+    caveat: 'La tasa de hash se estima a partir del ritmo de llegada de los bloques, así que es ruidosa día a día; las olas de calor, las inundaciones y la regulación también apagan mineros. Solo existe un puñado de señales claras.',
+  },
+  cbPremium: {
+    name: 'Prima de Coinbase (media 7d)',
+    short: 'Prima Coinbase',
+    description: 'Cuánto se sitúa el precio en dólares de Coinbase por encima (o por debajo) del precio en tether de Binance. En Coinbase operan los fondos e instituciones de EE. UU., así que una prima apunta a compras estadounidenses.',
+    read: [
+      'Positiva: bitcoin cuesta más en Coinbase que en Binance, lo que ocurre cuando los fondos e instituciones de EE. UU. son los compradores con prisa.',
+      'Negativa: las ventas vienen del lado estadounidense. Los descuentos sostenidos han acompañado tramos débiles.',
+    ],
+    caveat: 'También incluye el tipo de cambio entre tether y el dólar: cuando tether se aleja de un dólar la prima se mueve sin que cambie la demanda. El arbitraje la mantiene dentro de unas centésimas de punto porcentual casi todos los días, así que las lecturas pequeñas dicen poco.',
+  },
+  netLiquidity: {
+    name: 'Liquidez neta en dólares (Fed)',
+    short: 'Liquidez neta',
+    description: 'El balance de la Reserva Federal menos la cuenta de efectivo del Tesoro y la facilidad de repos inversos: una medida aproximada de los dólares disponibles para los mercados financieros.',
+    read: [
+      'En alza: la Fed añade reservas, o el Tesoro y la facilidad de repos inversos liberan efectivo a los mercados. Los activos de riesgo, bitcoin incluido, han tendido a ir mejor en esos periodos.',
+      'En baja: se drenan dólares del sistema, un viento en contra para los activos de riesgo.',
+    ],
+    caveat: 'Una cifra lenta, semanal, y una fórmula popular pero burda. Describe el clima a lo largo de meses y no dice nada sobre esta semana. El modelo usa su variación a 90 días.',
+  },
   exSupply: {
     name: 'Oferta en exchanges (% de la oferta)',
     short: 'Oferta exchanges',
@@ -722,6 +752,36 @@ const pt: Record<string, MetricText> = {
       'Abaixo de ~0,5 os mineradores ganham muito menos que o normal e os mais fracos desligam as máquinas: historicamente, uma zona de capitulação perto dos fundos de ciclo.',
     ],
     caveat: 'Cada halving corta a emissão pela metade, então as leituras mudam bruscamente em torno dos halvings, e as taxas pesam cada vez mais.',
+  },
+  hashRibbon: {
+    name: 'Faixa de hash (taxa de hash 30d ÷ 60d)',
+    short: 'Faixa de hash',
+    description: 'A média de 30 dias da taxa de hash da rede dividida pela média de 60 dias. Abaixo de 1 a rede está encolhendo: os mineradores estão desligando máquinas.',
+    read: [
+      'A taxa de hash é o poder de computação que protege a rede. Quando a média de 30 dias cai abaixo da de 60 (faixa abaixo de 1), os mineradores desligam máquinas porque minerar deixou de compensar.',
+      'Esses períodos costumam vir no fim das quedas. A faixa voltar a subir acima de 1 marcou historicamente o fim do aperto dos mineradores.',
+    ],
+    caveat: 'A taxa de hash é estimada pelo ritmo de chegada dos blocos, então é ruidosa no dia a dia; ondas de calor, enchentes e regulação também desligam mineradores. Existe apenas um punhado de sinais claros.',
+  },
+  cbPremium: {
+    name: 'Prêmio da Coinbase (média 7d)',
+    short: 'Prêmio Coinbase',
+    description: 'Quanto o preço em dólares na Coinbase fica acima (ou abaixo) do preço em tether na Binance. Na Coinbase operam os fundos e instituições dos EUA, então um prêmio aponta para compras americanas.',
+    read: [
+      'Positivo: o bitcoin custa mais na Coinbase do que na Binance, o que acontece quando fundos e instituições dos EUA são os compradores com pressa.',
+      'Negativo: as vendas vêm do lado americano. Descontos persistentes acompanharam períodos fracos.',
+    ],
+    caveat: 'Também contém a taxa de câmbio entre tether e dólar: quando o tether se afasta de um dólar o prêmio se move sem mudança na demanda. A arbitragem o mantém dentro de alguns centésimos de ponto percentual na maioria dos dias, então leituras pequenas dizem pouco.',
+  },
+  netLiquidity: {
+    name: 'Liquidez líquida em dólares (Fed)',
+    short: 'Liquidez líquida',
+    description: 'O balanço do Federal Reserve menos a conta de caixa do Tesouro e a linha de recompras reversas: uma medida aproximada dos dólares disponíveis para os mercados financeiros.',
+    read: [
+      'Subindo: o Fed adiciona reservas, ou o Tesouro e a linha de recompras reversas liberam caixa para os mercados. Ativos de risco, bitcoin incluído, tenderam a ir melhor nesses períodos.',
+      'Caindo: dólares estão sendo drenados do sistema, um vento contrário para ativos de risco.',
+    ],
+    caveat: 'Um número lento, semanal, e uma fórmula popular mas grosseira. Descreve o clima ao longo de meses e não diz nada sobre esta semana. O modelo usa sua variação de 90 dias.',
   },
   exSupply: {
     name: 'Oferta nas corretoras (% da oferta)',

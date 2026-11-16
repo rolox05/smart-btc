@@ -319,6 +319,27 @@ const CATALOGUE: MetricDef[] = [
   },
 
   {
+    id: 'hashRibbon', name: 'Hash ribbon (30d ÷ 60d hash rate)', short: 'Hash ribbon', group: 'onchain',
+    description: 'The 30-day average of the network hash rate divided by its 60-day average. Below 1 the network is shrinking: miners are switching machines off.',
+    source: 'Coin Metrics', display: 'pane', pane: 'hashribbon', unit: 'ratio', colorSlot: 2,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 1, label: 'Flat' }],
+  },
+  {
+    id: 'cbPremium', name: 'Coinbase premium (7d avg)', short: 'Coinbase premium', group: 'sentiment',
+    description: 'How far the dollar price on Coinbase sits above (or below) the tether price on Binance. Coinbase is where US funds and institutions trade, so a premium points to US buying.',
+    source: 'Coinbase', display: 'pane', pane: 'cbpremium', unit: 'pct', colorSlot: 1,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+    bands: [{ value: 0, label: '' }],
+  },
+  {
+    id: 'netLiquidity', name: 'Net dollar liquidity (Fed)', short: 'Net liquidity', group: 'liquidity',
+    description: 'The Federal Reserve balance sheet minus the Treasury cash account and the reverse-repo facility: a rough measure of the dollars available to financial markets.',
+    source: 'FRED', display: 'pane', pane: 'netliq', unit: 'usd', colorSlot: 6,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+
+  {
     id: 'cycleDay', name: 'Days since halving', short: 'Since halving', group: 'cycle',
     description: 'Position in the four-year halving cycle. Backtests best of all inputs, but rests on only three completed cycles - treat it as a prior, not a law.',
     source: 'Protocol schedule', display: 'pane', pane: 'cycle', unit: 'days', colorSlot: 5,
@@ -329,6 +350,24 @@ const CATALOGUE: MetricDef[] = [
 export const METRICS: MetricDef[] = CATALOGUE.map((m) => ({ ...m, guide: GUIDE[m.id] }));
 
 export const METRIC_BY_ID = new Map(METRICS.map((m) => [m.id, m]));
+
+/**
+ * The downloaded sources behind each metric (ids from providers/). Where several are listed the first
+ * is the main one and the others stand in for it; metrics computed from price alone are not listed.
+ */
+export const METRIC_PROVIDERS: Record<string, string[]> = {
+  sthRealizedPrice: ['bgeometrics'], sthMvrv: ['bgeometrics'], sthBehavior: ['bgeometrics'], sthSopr: ['bgeometrics'],
+  realizedPrice: ['coinmetrics'], mvrv: ['coinmetrics'], exchNetflow: ['coinmetrics'], puell: ['coinmetrics'], exSupply: ['coinmetrics'], fees: ['coinmetrics'],
+  txCount: ['coinmetrics', 'blockchain-com'], hashRibbon: ['coinmetrics', 'blockchain-com', 'mempool'],
+  dvol: ['deribit'], putCall: ['deribit-options'],
+  funding: ['binance-futures', 'bybit', 'okx'], premium: ['binance-premium'], hlFunding: ['hyperliquid'],
+  oi: ['bybit', 'binance-futures'], oiChange30: ['bybit'], lsRatio: ['bybit', 'binance-futures'],
+  cotLevNet: ['cftc'], cotAssetNet: ['cftc'],
+  fng: ['alternative-me'], stableGrowth: ['defillama'],
+  dxy: ['yahoo'], us10y: ['yahoo', 'fred'], nasdaqMom: ['yahoo'], goldMom: ['yahoo'], ibitVolume: ['yahoo'],
+  cbPremium: ['coinbase', 'binance-spot'], netLiquidity: ['fred'],
+};
+
 
 /** Ids of the metrics recomputed on each timeframe's own bars (see NATIVE_METRICS in dataset.ts). */
 const NATIVE = new Set(['sma200', 'sma50', 'bbUpper', 'supertrend', 'rsi14', 'mom30', 'vol30']);
@@ -379,4 +418,9 @@ export function metricsFor(tf: Timeframe, t: T = EN): MetricDef[] {
     const guide = m.guide && { ...m.guide, caveat: m.guide.caveat ? `${m.guide.caveat} ${extra}` : extra };
     return { ...m, ...renamed[m.id], guide };
   });
+}
+
+/** Short names of the metrics a source feeds, for the data-sources list. */
+export function feedsOf(providerId: string, t: T = EN): string[] {
+  return METRICS.filter((m) => METRIC_PROVIDERS[m.id]?.includes(providerId)).map((m) => localizeMetric(m, t).short);
 }

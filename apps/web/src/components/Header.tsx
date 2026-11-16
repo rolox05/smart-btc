@@ -27,7 +27,8 @@ export function Header({
   onLang: (lang: Lang) => void;
 }) {
   const { t } = useT();
-  const sources = overview?.sources ?? [];
+  // Sources the user switched off are not expected to be live.
+  const sources = (overview?.sources ?? []).filter((s) => s.status !== 'off');
   const live = sources.filter((s) => s.status === 'ok').length;
   const allLive = sources.length > 0 && live === sources.length;
   const price = ticker?.price ?? overview?.price;

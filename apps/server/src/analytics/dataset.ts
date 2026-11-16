@@ -94,17 +94,33 @@ function nativeMetrics(h: Arr, l: Arr, c: Arr, barsPerYear: number, series: Map<
 
 const HALVINGS = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'].map((d) => Date.parse(`${d}T00:00:00Z`) / 1000);
 
-function mergeCandles(binance: Candle[], bitstamp: Candle[]): Candle[] {
-  if (binance.length === 0) return bitstamp;
-  const first = binance[0].t;
-  const last = binance[binance.length - 1].t;
-  // Bitstamp supplies the pre-2017 history, and takes over again if Binance falls behind (e.g. geo-blocked).
-  return [...bitstamp.filter((c) => c.t < first), ...binance, ...bitstamp.filter((c) => c.t > last)];
+/**
+ * One price history from several exchanges. The first set that has data is the backbone; the others
+ * only add the days before it starts and after it ends, so an exchange that is switched off, blocked
+ * or behind is covered without mixing prices inside the backbone's own span.
+ */
+export function mergeCandles(sets: Candle[][]): Candle[] {
+  let out: Candle[] = [];
+  for (const set of sets) {
+    if (!set.length) continue;
+    if (!out.length) {
+      out = set;
+      continue;
+    }
+    const first = out[0].t;
+    const last = out[out.length - 1].t;
+    out = [...set.filter((c) => c.t < first), ...out, ...set.filter((c) => c.t > last)];
+  }
+  return out;
 }
 
+/** Daily price sources: Binance first, then the others from the longest history to the shortest. */
+const DAILY_SOURCES = ['binance', 'bitstamp', 'coinbase', 'kraken'];
+
 async function buildDaily(store: Store, version: number): Promise<Dataset | null> {
-  const [bn, bs] = await Promise.all([store.getCandles('binance', '1d'), store.getCandles('bitstamp', '1d')]);
-  const merged = mergeCandles(bn, bs);
+  const sets = await Promise.all(DAILY_SOURCES.map((s) => store.getCandles(s, '1d')));
+  const [bn, , cb] = sets;
+  const merged = mergeCandles(sets);
   if (merged.length < 400) return null;
 
   const t0 = merged[0].t;
@@ -151,6 +167,8 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
     'bybit.oi', 'bybit.lsRatio', 'binance.premium', 'hl.funding', 'deribit.putCall',
     'cftc.levNet', 'cftc.assetNet',
     'yahoo.dxy', 'yahoo.us10y', 'yahoo.nasdaq', 'yahoo.gold', 'yahoo.ibitVol',
+    'bybit.funding', 'okx.funding', 'cm.hashrate', 'bc.hashrate', 'mp.hashrate', 'bc.txCnt',
+    'fred.walcl', 'fred.tga', 'fred.rrp', 'fred.us10y',
   ] as const;
   const raw = Object.fromEntries(
     await Promise.all(ids.map(async (id) => [id, await store.getPoints(id)] as const)),
@@ -265,7 +283,9 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   // ── derivatives ──
   const fSum = new Float64Array(n);
   const fCnt = new Float64Array(n);
-  for (const p of raw['binance.funding']) {
+  // Binance is the reference venue; if it is off or empty, the next venue with data stands in.
+  const fundingRaw = [raw['binance.funding'], raw['bybit.funding'], raw['okx.funding']].find((pts) => pts.length > 0) ?? [];
+  for (const p of fundingRaw) {
     const i = Math.floor((p.t - t0) / DAY);
     if (i < 0 || i >= n) continue;
     fSum[i] += p.v;
@@ -352,12 +372,58 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   features.set('exSupply', lag(map(exSupply, (x, i) => (i >= 30 ? x - exSupply[i - 30] : NaN)), 1));
   fresh.set('exSupply', lastValid(exRaw));
 
-  const txRaw = align(raw['cm.txCnt']);
+  // First source that has a value on the day: the main one, then its stand-ins.
+  const firstOf = (...xs: Arr[]): Arr => {
+    const out = new Float64Array(n).fill(NaN);
+    for (let i = 0; i < n; i++) {
+      for (const x of xs) {
+        if (!Number.isNaN(x[i])) {
+          out[i] = x[i];
+          break;
+        }
+      }
+    }
+    return out;
+  };
+
+  const txRaw = firstOf(align(raw['cm.txCnt']), align(raw['bc.txCnt']));
   series.set('txCount', sma(ffill(txRaw, 3), 30));
   fresh.set('txCount', lastValid(txRaw));
   const feesRaw = align(raw['cm.feesBtc']);
   series.set('fees', sma(map(ffill(feesRaw, 3), (f, i) => f * c[i]), 7));
   fresh.set('fees', lastValid(feesRaw));
+
+  // Hash ribbon: 30-day over 60-day average hash rate. Below 1 the network is shrinking, which has
+  // happened when miners switch off unprofitable machines.
+  const hashRaw = firstOf(align(raw['cm.hashrate']), align(raw['bc.hashrate']), align(raw['mp.hashrate']));
+  const hash = ffill(hashRaw, 3);
+  const sma60 = sma(hash, 60);
+  const hashRibbon = map(sma(hash, 30), (a, i) => a / sma60[i]);
+  series.set('hashRibbon', hashRibbon);
+  features.set('hashRibbon', lag(ln(hashRibbon), 1));
+  fresh.set('hashRibbon', lastValid(hashRaw));
+
+  // Coinbase premium: the US dollar price on Coinbase against the tether price on Binance, closed days
+  // only (the two feeds are read at different moments during the day), 7-day average, in %.
+  const lastClosedDay = lastClosedIndex(t, '1d');
+  const cbClose = align(cb.map((k) => ({ t: k.t, v: k.c })));
+  const bnClose = align(bn.map((k) => ({ t: k.t, v: k.c })));
+  const cbRaw = map(cbClose, (a, i) => (i <= lastClosedDay && bnClose[i] > 0 ? (a / bnClose[i] - 1) * 100 : NaN));
+  const cbPremium = sma(ffill(cbRaw, 2), 7);
+  series.set('cbPremium', cbPremium);
+  features.set('cbPremium', cbPremium);
+  fresh.set('cbPremium', lastValid(cbRaw));
+
+  // Net dollar liquidity: the Fed's balance sheet minus the Treasury's cash account and the reverse-repo
+  // facility. Weekly figures are stored on their publication day and carried until the next one.
+  const walclRaw = align(raw['fred.walcl']);
+  const walcl = ffill(walclRaw, 10);
+  const tga = ffill(align(raw['fred.tga']), 10);
+  const rrp = ffill(align(raw['fred.rrp']), 6);
+  const netLiq = map(walcl, (a, i) => a - tga[i] - rrp[i]);
+  series.set('netLiquidity', netLiq);
+  features.set('netLiquidity', pctChange(netLiq, 90));
+  fresh.set('netLiquidity', lastValid(walclRaw));
 
   // ── macro (Yahoo Finance): markets close at weekends, so values carry over up to 4 days ──
   const dxyRaw = align(raw['yahoo.dxy']);
@@ -365,7 +431,7 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
   series.set('dxy', dxy);
   features.set('dxy', pctChange(dxy, 30));
   fresh.set('dxy', lastValid(dxyRaw));
-  const tnxRaw = align(raw['yahoo.us10y']);
+  const tnxRaw = firstOf(align(raw['yahoo.us10y']), align(raw['fred.us10y']));
   const us10y = ffill(tnxRaw, 4);
   series.set('us10y', us10y);
   features.set('us10y', map(us10y, (x, i) => (i >= 30 ? x - us10y[i - 30] : NaN)));
@@ -623,6 +689,11 @@ function describe(id: string, v: number, pct: number, t: T): { reading: string; 
       return v > 1 ? r('More puts than calls') : v < 0.6 ? r('Call-heavy positioning') : r('Balanced');
     case 'cotLevNet':
       return v < -20 ? r('Leveraged funds heavily short') : v > 20 ? r('Leveraged funds heavily long') : r('Neutral');
+    case 'hashRibbon':
+      return v < 1 ? r('Hash rate shrinking: miners under stress') : v > 1.03 ? r('Hash rate growing fast') : r('Hash rate growing');
+    case 'cbPremium':
+      if (v > 0.08) return r('US buyers paying up', 'bullish');
+      return v < -0.08 ? r('US sellers pressing', 'bearish') : r('Balanced');
     case 'lsRatio':
       return v > 2.5 ? r('Retail heavily long', 'bearish') : v < 1 ? r('Retail net short', 'bullish') : r('Retail leaning long');
     case 'sma200':
