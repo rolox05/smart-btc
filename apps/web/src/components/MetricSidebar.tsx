@@ -1,10 +1,11 @@
 import { METRIC_GROUP_LABEL, type AnnotationDef, type MetricDef, type MetricGroup, type MetricSnapshot } from '@smart-btc/shared';
 import clsx from 'clsx';
-import { BookOpen, BrainCircuit, CornerDownRight, Eye, EyeOff, PanelLeftClose } from 'lucide-react';
-import { Fragment } from 'react';
+import { BookOpen, BrainCircuit, ChevronDown, ChevronUp, CornerDownRight, Eye, EyeOff, GripVertical, PanelLeftClose } from 'lucide-react';
+import { Fragment, useState } from 'react';
 import { fmtDate, fmtMetric } from '../lib/format';
 import { useT } from '../lib/i18n';
 import { SERIES } from '../lib/palette';
+import { type ChartPane, paneName } from '../lib/panes';
 import type { Layers } from '../lib/state';
 import { HoverCard, Switch } from './ui';
 
@@ -18,6 +19,12 @@ interface Props {
   visible: string[];
   model: string[];
   layers: Layers;
+  /** Indicator charts for the metrics switched on, in display order, including the ones turned off. */
+  panes: ChartPane[];
+  onMovePane: (id: string, dir: -1 | 1) => void;
+  /** Drop one chart just before or after another. */
+  onPlacePane: (id: string, targetId: string, after: boolean) => void;
+  onTogglePane: (id: string) => void;
   onToggleVisible: (id: string) => void;
   onToggleModel: (id: string) => void;
   onToggleAnnotation: (id: string) => void;
@@ -29,11 +36,41 @@ interface Props {
   /** Show explanation cards on hover. */
   explain: boolean;
   onResetSelections: () => void;
+  /** Sections of this panel that are folded away: 'layers', 'charts', 'metrics' or 'group:<metric group>'. */
+  collapsedPanels: string[];
+  onCollapsedPanels: (ids: string[]) => void;
 }
 
-export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapshot, visible, model, layers, onToggleVisible, onToggleModel, onToggleAnnotation, onOpenGuide, onLayers, onCollapse, explain, onResetSelections }: Props) {
+/** Section heading that folds its section away and back. */
+function PanelTitle({ id, label, collapsed, onToggle }: { id: string; label: string; collapsed: boolean; onToggle: (id: string) => void }) {
+  return (
+    <button onClick={() => onToggle(id)} aria-expanded={!collapsed} className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-ink2 hover:text-ink">
+      <ChevronDown size={13} className={clsx('transition-transform', collapsed && '-rotate-90')} />
+      {label}
+    </button>
+  );
+}
+
+export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapshot, visible, model, layers, panes, onMovePane, onPlacePane, onTogglePane, onToggleVisible, onToggleModel, onToggleAnnotation, onOpenGuide, onLayers, onCollapse, explain, onResetSelections, collapsedPanels, onCollapsedPanels }: Props) {
   const { t } = useT();
+  const isCollapsed = (id: string) => collapsedPanels.includes(id);
+  const togglePanel = (id: string) => onCollapsedPanels(isCollapsed(id) ? collapsedPanels.filter((x) => x !== id) : [...collapsedPanels, id]);
   const snap = new Map(snapshot.map((s) => [s.id, s]));
+  // The chart being dragged in the Charts list and where it would land.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null);
+  /** The row of the Charts list under a vertical position, and which half of it. */
+  const rowAt = (from: Element, clientY: number): { id: string; after: boolean } | null => {
+    const rows = [...(from.closest('[data-pane-list]')?.querySelectorAll<HTMLElement>('[data-pane-row]') ?? [])];
+    if (!rows.length) return null;
+    const row = rows.find((r) => clientY < r.getBoundingClientRect().bottom) ?? rows[rows.length - 1];
+    const box = row.getBoundingClientRect();
+    return { id: row.dataset.paneRow!, after: clientY > box.top + box.height / 2 };
+  };
+  const endDrag = () => {
+    setDragId(null);
+    setDrop(null);
+  };
   const layer = (key: keyof Layers, labelKey: string, whatKey: string) => {
     const label = t(labelKey);
     const what = t(whatKey);
@@ -47,12 +84,13 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
   return (
     <aside className="flex flex-col gap-3">
       <section className="rounded-lg border border-line bg-panel">
-        <header className="flex items-center justify-between border-b border-line px-3 py-2">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink2">{t('Chart layers')}</h3>
+        <header className={clsx('flex items-center justify-between px-3 py-2', !isCollapsed('layers') && 'border-b border-line')}>
+          <PanelTitle id="layers" label={t('Chart layers')} collapsed={isCollapsed('layers')} onToggle={togglePanel} />
           <button onClick={onCollapse} title={t('Hide this panel (bring it back with the button above the chart)')} className="flex items-center gap-1 rounded-md border border-line px-1.5 py-0.5 text-[10.5px] text-ink2 hover:bg-raised">
             <PanelLeftClose size={12} /> {t('Hide panel')}
           </button>
         </header>
+        {!isCollapsed('layers') && (
         <div className="px-3 py-1.5">
           {layer('cone', 'Forecast cone', 'Draws where the modelled paths go from here: the median (solid), the band holding half of them (dashed) and the band holding eight in ten (dotted).')}
           {layer('targets', 'Scenario targets', 'Horizontal lines at the median outcome of the rally and decline scenarios, labelled with their probability.')}
@@ -63,24 +101,95 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
           {layer('walls', 'Order-book walls', 'Unusually large resting buy or sell orders in the combined spot order books. They can slow price, and they can be withdrawn.')}
           {layer('logScale', 'Log price scale', 'Equal distances on the axis become equal percentage moves. Useful when the chart spans several years.')}
         </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-line bg-panel">
-        <header className="flex items-center justify-between border-b border-line px-3 py-2">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink2">{t('Metrics')}</h3>
+        <header className={clsx('flex items-center justify-between px-3 py-2', !isCollapsed('charts') && 'border-b border-line')}>
+          <PanelTitle id="charts" label={t('Charts')} collapsed={isCollapsed('charts')} onToggle={togglePanel} />
+          <span className="text-[10px] text-mute">{t('drag to reorder')}</span>
+        </header>
+        {!isCollapsed('charts') && (
+        <div data-pane-list className="px-2 py-1.5">
+          <div className="flex items-center gap-2 rounded px-1 py-1 text-xs text-mute">
+            <span className="min-w-0 flex-1 truncate">{t('Price')}</span>
+            <span className="text-[10px]">{t('always on top')}</span>
+          </div>
+          {panes.map((p, i) => (
+            <div
+              key={p.id}
+              data-pane-row={p.id}
+              className={clsx(
+                'flex items-center gap-1 rounded border-y-2 border-transparent px-1 hover:bg-raised/60',
+                dragId === p.id && 'opacity-40',
+                drop?.id === p.id && dragId !== p.id && (drop.after ? '!border-b-accent' : '!border-t-accent'),
+              )}
+            >
+              {/* Pointer events instead of native drag-and-drop, so it also works on touch screens. */}
+              <span
+                className="flex min-w-0 flex-1 cursor-grab touch-none select-none items-center gap-1 active:cursor-grabbing"
+                title={t('Drag to move this chart')}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  setDragId(p.id);
+                }}
+                onPointerMove={(e) => dragId && setDrop(rowAt(e.currentTarget, e.clientY))}
+                onPointerUp={() => {
+                  if (dragId && drop && drop.id !== dragId) onPlacePane(dragId, drop.id, drop.after);
+                  endDrag();
+                }}
+                onPointerCancel={endDrag}
+              >
+                <GripVertical size={12} className="shrink-0 text-mute" aria-hidden />
+                <span className={clsx('min-w-0 flex-1 truncate text-xs', p.hidden ? 'text-mute line-through' : 'text-ink')} title={p.metrics.map((m) => m.name).join(', ')}>
+                  {paneName(p)}
+                </span>
+              </span>
+              <button onClick={() => onMovePane(p.id, -1)} disabled={i === 0} aria-label={t('Move {name} up', { name: paneName(p) })} className="rounded p-1 text-mute hover:text-ink disabled:opacity-25">
+                <ChevronUp size={14} />
+              </button>
+              <button onClick={() => onMovePane(p.id, 1)} disabled={i === panes.length - 1} aria-label={t('Move {name} down', { name: paneName(p) })} className="rounded p-1 text-mute hover:text-ink disabled:opacity-25">
+                <ChevronDown size={14} />
+              </button>
+              <button
+                onClick={() => onTogglePane(p.id)}
+                aria-pressed={!p.hidden}
+                aria-label={t(p.hidden ? 'Turn on the {name} chart' : 'Turn off the {name} chart', { name: paneName(p) })}
+                className={clsx('rounded p-1', p.hidden ? 'text-mute hover:text-ink2' : 'bg-raised text-ink')}
+              >
+                {p.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          ))}
+          {panes.length === 0 && <p className="px-1 py-1 text-[11px] text-mute">{t('No indicator charts are on. Turn one on with the eye icon in the metrics list below.')}</p>}
+        </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-line bg-panel">
+        <header className={clsx('flex items-center justify-between px-3 py-2', !isCollapsed('metrics') && 'border-b border-line')}>
+          <PanelTitle id="metrics" label={t('Metrics')} collapsed={isCollapsed('metrics')} onToggle={togglePanel} />
           <div className="flex items-center gap-2 text-[10px] text-mute">
             <span className="flex items-center gap-1"><Eye size={11} /> {t('chart')}</span>
             <span className="flex items-center gap-1"><BrainCircuit size={11} /> {t('model input')}</span>
           </div>
         </header>
+        {!isCollapsed('metrics') && (
+        <>
         <div className="divide-y divide-line">
           {GROUP_ORDER.map((g) => {
             const items = metrics.filter((m) => m.group === g);
             if (!items.length) return null;
             return (
               <div key={g} className="px-2 py-2">
-                <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mute">{t(METRIC_GROUP_LABEL[g])}</div>
-                {items.map((m) => {
+                <button onClick={() => togglePanel(`group:${g}`)} aria-expanded={!isCollapsed(`group:${g}`)} className="flex w-full items-center justify-between px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mute hover:text-ink2">
+                  <span>{t(METRIC_GROUP_LABEL[g])}</span>
+                  <span className="flex items-center gap-1 font-normal normal-case tracking-normal">
+                    {isCollapsed(`group:${g}`) && t('{n} metrics', { n: items.length })}
+                    <ChevronDown size={12} className={clsx('transition-transform', !isCollapsed(`group:${g}`) && 'rotate-180')} />
+                  </span>
+                </button>
+                {!isCollapsed(`group:${g}`) && items.map((m) => {
                   const s = snap.get(m.id);
                   const isVisible = visible.includes(m.id);
                   const inModel = model.includes(m.id);
@@ -187,6 +296,8 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
             {t('Reset selections')}
           </button>
         </footer>
+        </>
+        )}
       </section>
     </aside>
   );

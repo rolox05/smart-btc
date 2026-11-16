@@ -54,6 +54,10 @@ export interface AppState {
   visible: string[] | null;
   /** Metric ids used as model inputs. null = catalogue defaults. */
   model: string[] | null;
+  /** Indicator charts in the order the user arranged them (pane ids); charts not listed follow in catalogue order. */
+  paneOrder: string[];
+  /** Indicator charts switched off as a whole while their metrics stay selected. */
+  hiddenPanes: string[];
   /** Enabled chart annotations (e.g. RSI divergences). */
   annotations: string[];
   settings: Omit<ForecastSettings, 'features'>;
@@ -66,6 +70,8 @@ export interface AppState {
   heatmapWindow: HeatmapWindow;
   /** Show explanations when hovering metrics and chart lines. */
   explain: boolean;
+  /** Folded sections of the metrics panel (see MetricSidebar). */
+  collapsedPanels: string[];
   /** Hide the metrics panel to give the chart and the forecast the full width. */
   sidebarCollapsed: boolean;
   /** Widths (px) the side panels were dragged to; null = the default for the screen size. */
@@ -86,6 +92,8 @@ export const DEFAULT_STATE: AppState = {
   lang: pickLang(typeof navigator !== 'undefined' ? navigator.languages?.join(',') || navigator.language : 'en'),
   visible: null,
   model: null,
+  paneOrder: [],
+  hiddenPanes: [],
   annotations: [],
   settings: baseSettings,
   layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false, volume: true, levels: true },
@@ -93,6 +101,7 @@ export const DEFAULT_STATE: AppState = {
   center: 'chart',
   heatmapWindow: '2w',
   explain: true,
+  collapsedPanels: [],
   sidebarCollapsed: false,
   panelWidths: { left: null, right: null },
   todayCollapsed: false,

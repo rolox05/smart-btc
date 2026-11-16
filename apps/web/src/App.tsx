@@ -31,6 +31,7 @@ import {
 } from './hooks/useData';
 import { api } from './lib/api';
 import { LangProvider, setLang, useT } from './lib/i18n';
+import { chartPanes, movePane, placePane } from './lib/panes';
 import { type TabId, useAppState, useDebounced, useSelections } from './lib/state';
 import { useLiveStream } from './hooks/useLiveStream';
 
@@ -167,6 +168,18 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
   });
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  // Indicator charts under the price chart, in the user's order; the ones switched off stay in the list.
+  const panes = chartPanes(metrics ?? [], visible, state.paneOrder, state.hiddenPanes);
+  // Charts that are not on right now keep the place they were given, after the ones on screen.
+  const setPaneOrder = (ids: string[]) => patch({ paneOrder: [...ids, ...state.paneOrder.filter((x) => !ids.includes(x))] });
+  const reorderPane = (id: string, dir: -1 | 1, amongShown: boolean) => setPaneOrder(movePane(panes, id, dir, amongShown));
+  const dropPane = (id: string, targetId: string, after: boolean) => setPaneOrder(placePane(panes, id, targetId, after));
+  const togglePane = (id: string) => patch({ hiddenPanes: toggle(state.hiddenPanes, id) });
+  const toggleVisible = (id: string) => {
+    // Switching a metric on also brings back its chart if that was turned off as a whole.
+    const paneId = metrics?.find((m) => m.id === id)?.pane ?? id;
+    patch({ visible: toggle(visible, id), ...(!visible.includes(id) ? { hiddenPanes: state.hiddenPanes.filter((x) => x !== paneId) } : {}) });
+  };
   const toggleAnnotation = (id: string) => {
     const turningOn = !state.annotations.includes(id);
     const metricId = overview.data?.annotations.find((a) => a.id === id)?.metricId;
@@ -294,14 +307,20 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             visible={visible}
             model={model}
             layers={state.layers}
-            onToggleVisible={(id) => patch({ visible: toggle(visible, id) })}
+            panes={panes}
+            collapsedPanels={state.collapsedPanels}
+            onCollapsedPanels={(collapsedPanels) => patch({ collapsedPanels })}
+            onMovePane={(id, dir) => reorderPane(id, dir, false)}
+            onPlacePane={dropPane}
+            onTogglePane={togglePane}
+            onToggleVisible={toggleVisible}
             onToggleModel={(id) => patch({ model: toggle(model, id) })}
             onToggleAnnotation={toggleAnnotation}
             onOpenGuide={openGuide}
             onLayers={(layers) => patch({ layers })}
             onCollapse={() => patch({ sidebarCollapsed: true })}
             explain={state.explain}
-            onResetSelections={() => patch({ visible: null, model: null })}
+            onResetSelections={() => patch({ visible: null, model: null, paneOrder: [], hiddenPanes: [] })}
           />
           </ErrorBoundary>
           </div>
@@ -369,6 +388,11 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
                 keyLevels={todayOk?.levels}
                 trade={tradeOk}
                 horizonLabel={dur(tf, settings.horizon)}
+                paneOrder={state.paneOrder}
+                hiddenPanes={state.hiddenPanes}
+                onMovePane={(id, dir) => reorderPane(id, dir, true)}
+                onPlacePane={dropPane}
+                onHidePane={togglePane}
                 metrics={ov.metrics}
                 visible={visible}
                 series={series.data}

@@ -37,8 +37,11 @@ import {
 } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtBarTime, fmtCompactUsd, fmtMetric, fmtPct, fmtUsd } from '../lib/format';
+import clsx from 'clsx';
+import { ChevronDown, ChevronUp, EyeOff, GripVertical } from 'lucide-react';
 import { useT } from '../lib/i18n';
 import { SERIES, UI } from '../lib/palette';
+import { type ChartPane, chartPanes, paneName } from '../lib/panes';
 import type { Layers } from '../lib/state';
 
 /** Explanation shown when the cursor rests on a line, level or marker (if "explain on hover" is on). */
@@ -58,6 +61,13 @@ interface Props {
   trade?: { side: 'long' | 'short'; stopPrice: number; takePrice: number };
   /** Horizon label for the range lines, e.g. "30d". */
   horizonLabel?: string;
+  /** Order of the indicator charts and the ones switched off (pane ids). */
+  paneOrder: string[];
+  hiddenPanes: string[];
+  onMovePane: (id: string, dir: -1 | 1) => void;
+  /** Drop one chart just before or after another. */
+  onPlacePane: (id: string, targetId: string, after: boolean) => void;
+  onHidePane: (id: string) => void;
   metrics: MetricDef[];
   visible: string[];
   series?: SeriesPayload;
@@ -72,11 +82,6 @@ interface Props {
   rangeBars: number;
   /** Explain lines, levels and markers on hover. */
   explain: boolean;
-}
-
-interface PaneSpec {
-  id: string;
-  metrics: MetricDef[];
 }
 
 const priceFormatFor = (m: MetricDef): PriceFormat => {
@@ -129,8 +134,11 @@ function fmtVolB(usd: number): string {
   return `$${b.toFixed(digits)}B`;
 }
 
-export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, metrics, visible, series, forecast, liquidity, annotationDefs, annotationData, layers, tf, rangeBars, explain }: Props) {
+export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, paneOrder, hiddenPanes, onMovePane, onPlacePane, onHidePane, metrics, visible, series, forecast, liquidity, annotationDefs, annotationData, layers, tf, rangeBars, explain }: Props) {
   const el = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  // An indicator chart being dragged by its handle, and the gap between charts it would land in.
+  const [drag, setDrag] = useState<{ id: string; targetId: string; after: boolean; lineY: number } | null>(null);
   const refs = useRef<Refs | null>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
   const [paneTops, setPaneTops] = useState<number[]>([0]);
@@ -157,15 +165,9 @@ export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, me
   const { overlays, panes } = useMemo(() => {
     const vis = metrics.filter((m) => visible.includes(m.id));
     const overlays = vis.filter((m) => m.display === 'overlay');
-    const panes: PaneSpec[] = [];
-    for (const m of vis.filter((x) => x.display === 'pane')) {
-      const id = m.pane ?? m.id;
-      const p = panes.find((x) => x.id === id);
-      if (p) p.metrics.push(m);
-      else panes.push({ id, metrics: [m] });
-    }
+    const panes: ChartPane[] = chartPanes(metrics, visible, paneOrder, hiddenPanes).filter((p) => !p.hidden);
     return { overlays, panes };
-  }, [metrics, visible]);
+  }, [metrics, visible, paneOrder, hiddenPanes]);
 
   // Annotations only exist on the chart while their metric's pane is shown.
   const activeAnnots = annotationDefs.filter((a) => panes.some((p) => p.metrics.some((m) => m.id === a.metricId)));
@@ -637,9 +639,21 @@ export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, me
   };
   const coneAtHover = hoverT != null && forecast ? forecast.cone.find((c) => c.t === hoverT) : undefined;
 
+  const paneTop = (i: number) => paneTops[i + 1] ?? MAIN_HEIGHT + i * PANE_HEIGHT;
+  const paneBottom = (i: number) => (i + 1 < panes.length ? paneTop(i + 1) : height);
+  /** Where a chart dragged to this vertical position would land. */
+  const dropAt = (id: string, clientY: number) => {
+    const y = clientY - (box.current?.getBoundingClientRect().top ?? 0);
+    let i = panes.findIndex((_, k) => y < paneBottom(k));
+    if (i < 0) i = panes.length - 1;
+    const after = y > (paneTop(i) + paneBottom(i)) / 2;
+    return { id, targetId: panes[i].id, after, lineY: after ? paneBottom(i) - 1 : paneTop(i) };
+  };
+
   return (
-    <div className="relative" style={{ height }}>
+    <div ref={box} className="relative" style={{ height }}>
       <div ref={el} className="absolute inset-0" />
+      {drag && <div className="pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-accent" style={{ top: drag.lineY }} />}
 
       {/* explanation of the line, level or marker under the cursor */}
       {tip && explain && (
@@ -704,9 +718,38 @@ export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, me
       {panes.map((p, i) => (
         <div
           key={p.id}
-          className="pointer-events-none absolute left-2 z-10 flex flex-wrap items-center gap-x-3 text-[11px] text-ink2"
+          className="group/pane pointer-events-none absolute left-2 z-10 flex flex-wrap items-center gap-x-3 text-[11px] text-ink2"
           style={{ top: (paneTops[i + 1] ?? MAIN_HEIGHT + i * PANE_HEIGHT) + 5 }}
         >
+          <span className={clsx('pointer-events-auto flex items-center rounded border bg-panel/90 text-mute', drag?.id === p.id ? 'border-accent' : 'border-line')}>
+            <span
+              role="button"
+              aria-label={t('Drag to move the {name} chart', { name: paneName(p) })}
+              title={t('Drag to move this chart')}
+              className="cursor-grab touch-none rounded-l p-0.5 hover:bg-raised hover:text-ink active:cursor-grabbing"
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDrag(dropAt(p.id, e.clientY));
+              }}
+              onPointerMove={(e) => drag && setDrag(dropAt(p.id, e.clientY))}
+              onPointerUp={() => {
+                if (drag && drag.targetId !== drag.id) onPlacePane(drag.id, drag.targetId, drag.after);
+                setDrag(null);
+              }}
+              onPointerCancel={() => setDrag(null)}
+            >
+              <GripVertical size={13} />
+            </span>
+            <button onClick={() => onMovePane(p.id, -1)} disabled={i === 0} aria-label={t('Move {name} up', { name: paneName(p) })} title={t('Move this chart up')} className="p-0.5 hover:bg-raised hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent">
+              <ChevronUp size={13} />
+            </button>
+            <button onClick={() => onMovePane(p.id, 1)} disabled={i === panes.length - 1} aria-label={t('Move {name} down', { name: paneName(p) })} title={t('Move this chart down')} className="p-0.5 hover:bg-raised hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent">
+              <ChevronDown size={13} />
+            </button>
+            <button onClick={() => onHidePane(p.id)} aria-label={t('Turn off the {name} chart', { name: paneName(p) })} title={t('Turn this chart off (bring it back from the Charts list)')} className="rounded-r p-0.5 hover:bg-raised hover:text-ink">
+              <EyeOff size={13} />
+            </button>
+          </span>
           {p.metrics.map((m) => (
             <span key={m.id} className="num flex items-center gap-1">
               <span className="w-3 rounded" style={{ background: SERIES[m.colorSlot], height: 3 }} />

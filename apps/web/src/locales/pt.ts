@@ -736,6 +736,20 @@ const dict: Dict = {
   "{usd} liquidated within {n} min": "{usd} liquidados em {n} min",
   "{usd} of longs liquidated within {n} min": "{usd} de comprados liquidados em {n} min",
   "{usd} of shorts liquidated within {n} min": "{usd} de vendidos liquidados em {n} min",
+  "Charts": "Gráficos",
+  "always on top": "sempre no topo",
+  "Move {name} up": "Subir {name}",
+  "Move {name} down": "Descer {name}",
+  "Move this chart up": "Subir este gráfico",
+  "Move this chart down": "Descer este gráfico",
+  "Turn off the {name} chart": "Ocultar o gráfico {name}",
+  "Turn on the {name} chart": "Mostrar o gráfico {name}",
+  "Turn this chart off (bring it back from the Charts list)": "Ocultar este gráfico (traga-o de volta pela lista Gráficos)",
+  "No indicator charts are on. Turn one on with the eye icon in the metrics list below.": "Não há gráficos de indicadores ativos. Ative um com o ícone do olho na lista de métricas abaixo.",
+  "drag to reorder": "arraste para reordenar",
+  "Drag to move the {name} chart": "Arraste para mover o gráfico {name}",
+  "Drag to move this chart": "Arraste para mover este gráfico",
+  "{n} metrics": "{n} métricas",
 };
 
 export default dict;
