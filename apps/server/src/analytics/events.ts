@@ -1,6 +1,6 @@
 import type { EventOverlay, EventStudy, EventsReport, MarketEvent, MarketEventKind, OptionExpiry } from '@smart-btc/shared';
 import { EN, type T } from '../i18n/index.js';
-import { fetchJson, ttlCache } from '../lib/http.js';
+import { fetchJson, fetchText, ttlCache } from '../lib/http.js';
 import { volArrays } from '../forecast/analog.js';
 import type { Store } from '../store/store.js';
 import type { Dataset } from './dataset.js';
@@ -73,9 +73,8 @@ const fallbackFomc = () =>
 
 const loadFomc = ttlCache(12 * 3_600_000, async (): Promise<{ dates: number[]; live: boolean }> => {
   try {
-    const res = await fetch('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const dates = parseFomcCalendar(await res.text());
+    const page = await fetchText('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', { timeoutMs: 15_000, retries: 0, headers: { Accept: 'text/html' } });
+    const dates = parseFomcCalendar(page);
     if (dates.length < 20) throw new Error('calendar layout changed');
     // The page only lists recent years: keep the older meetings from the built-in table.
     const merged = new Set([...fallbackFomc().filter((t) => t < dates[0]), ...dates]);

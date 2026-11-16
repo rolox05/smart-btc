@@ -22,3 +22,15 @@ test('liquidation frames: the side is the position that was force-closed', () =>
   ]);
   assert.deepEqual(bybit.parse({ op: 'pong' }), []);
 });
+
+test('deadline: a promise that never settles is abandoned, a prompt one passes through', async () => {
+  const { withDeadline, DeadlineError, ttlCache } = await import('../src/lib/http.js');
+  await assert.rejects(withDeadline(new Promise(() => {}), 20, 'upstream'), DeadlineError);
+  assert.equal(await withDeadline(Promise.resolve(7), 20, 'upstream'), 7);
+
+  // A load that hangs (a socket left open across sleep) must not block every later caller.
+  let calls = 0;
+  const cached = ttlCache(60_000, () => (++calls === 1 ? new Promise<number>(() => {}) : Promise.resolve(42)), 20);
+  await assert.rejects(cached(), DeadlineError);
+  assert.equal(await cached(), 42);
+});

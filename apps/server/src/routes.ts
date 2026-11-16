@@ -32,7 +32,7 @@ import type { Store } from './store/store.js';
 import { runBacktest } from './forecast/backtest.js';
 import { ForecastError, runForecast } from './forecast/forecast.js';
 import { runTradeSetup } from './forecast/tradeSetup.js';
-import { fetchJsonAny, ttlCache } from './lib/http.js';
+import { fetchJsonAny, ttlCache, withDeadline } from './lib/http.js';
 import { BINANCE_SPOT_HOSTS } from './providers/binance.js';
 import { isLocalOrigin } from './settingsRoutes.js';
 import { SourceRuleError, type SourcePrefs } from './sources/prefs.js';
@@ -314,6 +314,8 @@ export function registerRoutes(
   };
   app.post('/api/models', async (req) => (await modelsFor(settingsSchema.parse(req.body), trOf(req))).report);
 
+  /** The summary goes out without its liquidity levels if the exchanges are slow to answer. */
+  const LIQUIDITY_WAIT_MS = 6_000;
   // The conclusion first: one reading built from the models, the forecast, the calendar and liquidity.
   const todayFor = async (settings: ForecastSettings, t: T): Promise<TodaySummary | null> => {
     const { ds, daily, events, report } = await modelsFor(settings, t);
@@ -326,7 +328,7 @@ export function registerRoutes(
       }
     }
     // Order books are live calls to the exchanges; the summary does not wait on a failure there.
-    const liquidity = await liquidityReport(daily, t).catch(() => null);
+    const liquidity = await withDeadline(liquidityReport(daily, t), LIQUIDITY_WAIT_MS, 'liquidity').catch(() => null);
     const series = `${settings.timeframe}:${settings.horizon}`;
     let previous: TodaySnapshot | null = null;
     try {
