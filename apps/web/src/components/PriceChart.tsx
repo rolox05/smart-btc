@@ -746,7 +746,7 @@ export function PriceChart({ candles, ticker, keyLevels, trade, horizonLabel, pa
             <button onClick={() => onMovePane(p.id, 1)} disabled={i === panes.length - 1} aria-label={t('Move {name} down', { name: paneName(p) })} title={t('Move this chart down')} className="p-0.5 hover:bg-raised hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent">
               <ChevronDown size={13} />
             </button>
-            <button onClick={() => onHidePane(p.id)} aria-label={t('Turn off the {name} chart', { name: paneName(p) })} title={t('Turn this chart off (bring it back from the Charts list)')} className="rounded-r p-0.5 hover:bg-raised hover:text-ink">
+            <button onClick={() => onHidePane(p.id)} aria-label={t('Turn off the {name} chart', { name: paneName(p) })} title={t('Turn this chart off (bring it back from the Charts list or the eye next to its metric)')} className="rounded-r p-0.5 hover:bg-raised hover:text-ink">
               <EyeOff size={13} />
             </button>
           </span>

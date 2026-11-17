@@ -44,7 +44,7 @@ Environment variables: `API_PORT` (4747), `API_HOST` (127.0.0.1), `DATA_DIR` (`.
 - **Timeframe.** 15m, 1h, 4h, 24h, 1w or 1M, chosen above the chart. It applies to the candles, the
   price indicators (RSI, moving averages, Bollinger, momentum, volatility, divergences) and to the
   forecast, odds, trade setup, backtest, ranking and correlations. Horizons and stop/target ladders
-  rescale with it. On-chain, derivatives, sentiment and pullback-counter metrics are daily figures on
+  rescale with it. On-chain, derivatives, sentiment, pullback-counter and rally-counter metrics are daily figures on
   every timeframe (each bar sees the last completed day). Intraday candles come from Binance
   (15m: last 3 years; 1h and 4h: since 2017); weekly and monthly bars are built from daily history.
 - **Language.** English, Spanish or Portuguese, chosen in the header (the first visit follows the

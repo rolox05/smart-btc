@@ -34,6 +34,8 @@ const dict: Dict = {
   "{pct}% below ATH": "{pct}% abaixo da ATH",
   "Unusually long calm stretch": "Calmaria incomumente longa",
   "Pullback just happened": "Acabou de haver uma queda",
+  "Unusually long stretch without a rally": "Período incomumente longo sem alta",
+  "Rally just happened": "Acabou de haver uma alta",
   "{n} days": "{n} dias",
   "Net inflow to exchanges": "Entrada líquida nas corretoras",
   "Net outflow from exchanges": "Saída líquida das corretoras",

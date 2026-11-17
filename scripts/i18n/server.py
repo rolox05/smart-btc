@@ -34,6 +34,8 @@ T = {
     '{pct}% below ATH': ('{pct}% bajo el ATH', '{pct}% abaixo da ATH'),
     'Unusually long calm stretch': ('Calma inusualmente larga', 'Calmaria incomumente longa'),
     'Pullback just happened': ('Acaba de haber una caída', 'Acabou de haver uma queda'),
+    'Unusually long stretch without a rally': ('Racha inusualmente larga sin subidas', 'Período incomumente longo sem alta'),
+    'Rally just happened': ('Acaba de haber una subida', 'Acabou de haver uma alta'),
     '{n} days': ('{n} días', '{n} dias'),
     'Net inflow to exchanges': ('Entrada neta a exchanges', 'Entrada líquida nas corretoras'),
     'Net outflow from exchanges': ('Salida neta de exchanges', 'Saída líquida das corretoras'),

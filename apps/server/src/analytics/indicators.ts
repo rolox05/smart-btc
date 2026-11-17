@@ -168,6 +168,28 @@ export function daysSinceDrawdown(h: Arr, l: Arr, c: Arr, pct: number): Arr {
   return out;
 }
 
+/**
+ * Days since the last rally of at least `pct` (0.10 = 10%): the mirror of `daysSinceDrawdown`.
+ * A rally completes when the day's high trades `pct` above the lowest low of the current leg;
+ * the counter then resets and a new leg starts from that day's close.
+ */
+export function daysSinceRally(h: Arr, l: Arr, c: Arr, pct: number): Arr {
+  const out = nan(c.length);
+  let trough = l[0];
+  let count = 0;
+  for (let i = 0; i < c.length; i++) {
+    if (l[i] < trough) trough = l[i];
+    if (h[i] >= trough * (1 + pct)) {
+      count = 0;
+      trough = c[i];
+    } else {
+      count++;
+    }
+    out[i] = count;
+  }
+  return out;
+}
+
 export function map(x: Arr, fn: (v: number, i: number) => number): Arr {
   const out = nan(x.length);
   for (let i = 0; i < x.length; i++) out[i] = Number.isNaN(x[i]) ? NaN : fn(x[i], i);

@@ -129,6 +129,41 @@ export const GUIDE: Record<string, NonNullable<MetricDef['guide']>> = {
     read: ['Days since price last halved from a high. A halving has happened in every bear market so far; a long count means the market is far from its last one.'],
     caveat: 'About two dozen events in the whole history: read it as context for where the cycle stands, not as a signal.',
   },
+  gainDays10: {
+    read: ['Counts the days since price last rose 10% from the low of its current leg. Long counts mean a slow grind or a steady decline with no meaningful bounce.'],
+    caveat: 'The counter resets on the rally itself; a low count can mean either "just bounced" or "in a strong advance".',
+  },
+  gainDays15: {
+    read: ['Same idea with a 15% threshold: the time since the last medium-sized rally.'],
+    caveat: 'Strongly related to the 10% and 20% counters; one of the three usually carries the information.',
+  },
+  gainDays20: {
+    read: ['Days since the last 20% rally. Long stretches are typical of bear phases and of quiet ranges; compared with the 10% counter it tells a dead-cat bounce from a real recovery.'],
+  },
+  gainDays25: {
+    read: ['Days since the last 25% rally. Moves of this size usually start a new leg rather than a bounce inside a decline.'],
+    caveat: 'Closely related to the 20% and 30% counters.',
+  },
+  gainDays30: {
+    read: ['Days since the last 30% rally. Long counts mean the market has gone unusually long without a strong advance, as in late bear markets.'],
+    caveat: 'Events are infrequent, so the counter says little about the next few weeks.',
+  },
+  gainDays35: {
+    read: ['Days since the last 35% rally: a gauge of how long it has been since a major leg up.'],
+    caveat: 'Only a few dozen such events exist in the whole history.',
+  },
+  gainDays40: {
+    read: ['Days since the last 40% rise. Advances this large have marked the strong legs of bull markets and the first recoveries off bear-market lows.'],
+    caveat: 'Fewer than forty such events exist in the whole history.',
+  },
+  gainDays45: {
+    read: ['Days since the last 45% rise: in practice, how long ago the last powerful bull-market leg was.'],
+    caveat: 'Few events, so the counter describes the cycle more than it predicts the coming weeks.',
+  },
+  gainDays50: {
+    read: ['Days since price last rose 50% from a low. A long count means the market is far from its last big leg up.'],
+    caveat: 'Few events in the whole history: read it as context for where the cycle stands, not as a signal.',
+  },
   ddAth: {
     read: [
       'How far price is below its all-time high. Near 0%: price discovery. −20% to −40%: ordinary bull-market correction or early bear.',

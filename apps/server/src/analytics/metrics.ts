@@ -145,6 +145,62 @@ const CATALOGUE: MetricDef[] = [
     forecastable: true, defaultVisible: false, defaultInModel: false,
   },
 
+  // ── gain ──
+  {
+    id: 'gainDays10', name: 'Days without a 10% rally', short: 'No +10% for', group: 'gain',
+    description: 'Days since price last rose 10% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 0,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays15', name: 'Days without a 15% rally', short: 'No +15% for', group: 'gain',
+    description: 'Days since price last rose 15% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 1,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays20', name: 'Days without a 20% rally', short: 'No +20% for', group: 'gain',
+    description: 'Days since price last rose 20% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 2,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays25', name: 'Days without a 25% rally', short: 'No +25% for', group: 'gain',
+    description: 'Days since price last rose 25% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 3,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays30', name: 'Days without a 30% rally', short: 'No +30% for', group: 'gain',
+    description: 'Days since price last rose 30% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 4,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays35', name: 'Days without a 35% rally', short: 'No +35% for', group: 'gain',
+    description: 'Days since price last rose 35% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 6,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays40', name: 'Days without a 40% rally', short: 'No +40% for', group: 'gain',
+    description: 'Days since price last rose 40% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 5,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays45', name: 'Days without a 45% rally', short: 'No +45% for', group: 'gain',
+    description: 'Days since price last rose 45% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 7,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+  {
+    id: 'gainDays50', name: 'Days without a 50% rally', short: 'No +50% for', group: 'gain',
+    description: 'Days since price last rose 50% from the low of the current leg.',
+    source: 'Computed from daily highs/lows', display: 'pane', pane: 'gaindays', unit: 'days', colorSlot: 3,
+    forecastable: true, defaultVisible: false, defaultInModel: false,
+  },
+
   // ── on-chain ──
   {
     id: 'sthMvrv', name: 'STH-MVRV', short: 'STH-MVRV', group: 'onchain',

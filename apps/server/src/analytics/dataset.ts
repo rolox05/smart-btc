@@ -5,6 +5,7 @@ import {
   type Arr,
   atr,
   daysSinceDrawdown,
+  daysSinceRally,
   ffill,
   lag,
   map,
@@ -189,6 +190,11 @@ async function buildDaily(store: Store, version: number): Promise<Dataset | null
     const d = daysSinceDrawdown(h, l, c, pct / 100);
     series.set(`ddDays${pct}`, d);
     features.set(`ddDays${pct}`, map(d, (a) => Math.log1p(a)));
+  }
+  for (const pct of [10, 15, 20, 25, 30, 35, 40, 45, 50]) {
+    const d = daysSinceRally(h, l, c, pct / 100);
+    series.set(`gainDays${pct}`, d);
+    features.set(`gainDays${pct}`, map(d, (a) => Math.log1p(a)));
   }
   const ath = runningMax(h);
   const ddAth = map(ath, (m, i) => (c[i] / m - 1) * 100);
@@ -671,6 +677,16 @@ function describe(id: string, v: number, pct: number, t: T): { reading: string; 
     case 'ddDays45':
     case 'ddDays50':
       return pct >= 90 ? r('Unusually long calm stretch') : v <= 3 ? r('Pullback just happened') : r('{n} days', 'neutral', { n: v.toFixed(0) });
+    case 'gainDays10':
+    case 'gainDays15':
+    case 'gainDays20':
+    case 'gainDays25':
+    case 'gainDays30':
+    case 'gainDays35':
+    case 'gainDays40':
+    case 'gainDays45':
+    case 'gainDays50':
+      return pct >= 90 ? r('Unusually long stretch without a rally') : v <= 3 ? r('Rally just happened') : r('{n} days', 'neutral', { n: v.toFixed(0) });
     case 'exchNetflow':
       return v > 0 ? r('Net inflow to exchanges', 'bearish') : r('Net outflow from exchanges', 'bullish');
     case 'stableGrowth':

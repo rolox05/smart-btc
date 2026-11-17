@@ -9,7 +9,7 @@ import { type ChartPane, paneName } from '../lib/panes';
 import type { Layers } from '../lib/state';
 import { HoverCard, Switch } from './ui';
 
-const GROUP_ORDER: MetricGroup[] = ['momentum', 'drawdown', 'volatility', 'trend', 'onchain', 'derivatives', 'sentiment', 'liquidity', 'macro', 'cycle'];
+const GROUP_ORDER: MetricGroup[] = ['momentum', 'drawdown', 'gain', 'volatility', 'trend', 'onchain', 'derivatives', 'sentiment', 'liquidity', 'macro', 'cycle'];
 
 interface Props {
   metrics: MetricDef[];
@@ -56,6 +56,8 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
   const isCollapsed = (id: string) => collapsedPanels.includes(id);
   const togglePanel = (id: string) => onCollapsedPanels(isCollapsed(id) ? collapsedPanels.filter((x) => x !== id) : [...collapsedPanels, id]);
   const snap = new Map(snapshot.map((s) => [s.id, s]));
+  // Charts switched off as a whole: their metrics stay selected, so the eye has to bring the chart back.
+  const offPanes = new Set(panes.filter((p) => p.hidden).map((p) => p.id));
   // The chart being dragged in the Charts list and where it would land.
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null);
@@ -191,7 +193,10 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
                 </button>
                 {!isCollapsed(`group:${g}`) && items.map((m) => {
                   const s = snap.get(m.id);
-                  const isVisible = visible.includes(m.id);
+                  const selected = visible.includes(m.id);
+                  const paneId = m.pane ?? m.id;
+                  const chartOff = selected && m.display === 'pane' && offPanes.has(paneId);
+                  const isVisible = selected && !chartOff;
                   const inModel = model.includes(m.id);
                   const card = (
                     <>
@@ -230,7 +235,7 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
                         </div>
                         <div className="flex items-baseline justify-between gap-2 text-[10.5px]">
                           <span className={clsx('truncate', s?.tone === 'bullish' ? 'text-up' : s?.tone === 'bearish' ? 'text-down' : 'text-mute')}>
-                            {s?.reading || ' '}
+                            {chartOff ? <span className="text-warn">{t('Chart switched off')}</span> : s?.reading || ' '}
                           </span>
                           {s?.percentile != null && m.display === 'pane' && (
                             <span className="num shrink-0 text-mute" title={t("Percentile of the current value within the metric's own history")}>
@@ -240,10 +245,11 @@ export function MetricSidebar({ metrics, annotations, enabledAnnotations, snapsh
                         </div>
                       </div>
                       <button
-                        onClick={() => onToggleVisible(m.id)}
+                        onClick={() => (chartOff ? onTogglePane(paneId) : onToggleVisible(m.id))}
                         aria-pressed={isVisible}
-                        aria-label={t(isVisible ? 'Hide {name} on the chart' : 'Show {name} on the chart', { name: m.name })}
-                        className={clsx('rounded p-1', isVisible ? 'bg-raised text-ink' : 'text-mute hover:text-ink2')}
+                        aria-label={t(chartOff ? 'The {name} chart is off. Turn it back on' : isVisible ? 'Hide {name} on the chart' : 'Show {name} on the chart', { name: m.name })}
+                        title={chartOff ? t('Chart switched off. Click to turn it back on') : undefined}
+                        className={clsx('rounded p-1', isVisible ? 'bg-raised text-ink' : chartOff ? 'text-warn hover:text-ink' : 'text-mute hover:text-ink2')}
                       >
                         {isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
                       </button>

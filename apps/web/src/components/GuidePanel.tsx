@@ -19,7 +19,7 @@ import { Card, DivergingBar, Loading, Note, Segmented, Td, Th } from './ui';
 
 export type GuideSection = 'metrics' | 'relations' | 'method';
 
-const GROUP_ORDER: MetricGroup[] = ['momentum', 'drawdown', 'volatility', 'trend', 'onchain', 'derivatives', 'sentiment', 'liquidity', 'macro', 'cycle'];
+const GROUP_ORDER: MetricGroup[] = ['momentum', 'drawdown', 'gain', 'volatility', 'trend', 'onchain', 'derivatives', 'sentiment', 'liquidity', 'macro', 'cycle'];
 const WINDOW_LABEL: Record<RelationWindow, string> = { all: 'All history', '4y': 'Last 4 years', '1y': 'Last year' };
 
 const signed = (r: number) => `${r >= 0 ? '+' : '−'}${Math.abs(r).toFixed(2)}`;

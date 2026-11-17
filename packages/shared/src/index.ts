@@ -139,6 +139,7 @@ export type MetricGroup =
   | 'momentum'
   | 'volatility'
   | 'drawdown'
+  | 'gain'
   | 'onchain'
   | 'derivatives'
   | 'sentiment'
@@ -151,6 +152,7 @@ export const METRIC_GROUP_LABEL: Record<MetricGroup, string> = {
   momentum: 'Momentum',
   volatility: 'Volatility',
   drawdown: 'Drawdown',
+  gain: 'Gain',
   onchain: 'On-chain',
   derivatives: 'Derivatives',
   sentiment: 'Sentiment',
