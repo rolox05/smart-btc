@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  CYCLE_BACKS,
+  CYCLE_SPANS,
   HEATMAP_WINDOWS,
   TIMEFRAMES,
   type BacktestRequest,
@@ -16,6 +18,7 @@ import {
   type TodaySummary,
 } from '@smart-btc/shared';
 import { type Dataset, type DatasetService, snapshot } from './analytics/dataset.js';
+import { cycleRepeat } from './analytics/cycleRepeat.js';
 import { annotationsFor, buildAnnotation } from './analytics/divergence.js';
 import { langOf, makeT, type T } from './i18n/index.js';
 import { HEATMAP_TIMEFRAME, liquidationHeatmap } from './analytics/liquidationHeatmap.js';
@@ -256,6 +259,21 @@ export function registerRoutes(
     const daily = await dataset('1d', t);
     // One build per window, language and data update; the still-open bar changes little within that.
     return results.get(`h:${t.lang}:${ds.version}:${window}`, () => liquidationHeatmap(window, ds, daily, t));
+  });
+
+  // Past halving cycles replayed from today's price.
+  app.get('/api/cycle-repeat', async (req) => {
+    const q = z
+      .object({
+        cycles: z.string().max(40).default('3'),
+        span: z.enum(CYCLE_SPANS).default('halving'),
+        back: z.enum(CYCLE_BACKS).default('1y'),
+      })
+      .parse(req.query);
+    const t = trOf(req);
+    const ds = await dataset('1d', t);
+    const cycles = [...new Set(q.cycles.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0))].sort();
+    return results.get(`c:${t.lang}:${stamp(ds)}:${ds.lastClosed}:${cycles.join('.')}:${q.span}:${q.back}`, () => cycleRepeat(ds, { cycles, span: q.span, back: q.back }, t));
   });
 
   app.get('/api/annotations/:id', async (req, reply) => {

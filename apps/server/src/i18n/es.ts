@@ -295,6 +295,9 @@ const dict: Dict = {
   "Completeness": "Completitud",
   "Values": "Valores",
   "Agreement": "Concordancia",
+  "Each line is today's price moved day by day the way that cycle moved from day {d} after its own halving. Left of today it shows how that cycle would have arrived at the current price.": "Cada línea es el precio de hoy movido día a día como se movió ese ciclo desde el día {d} tras su propio halving. A la izquierda de hoy muestra cómo ese ciclo habría llegado al precio actual.",
+  "This is a what-if, not a forecast. There are only three completed cycles, each had smaller swings than the one before, and nothing obliges the next stretch to follow any of them.": "Es un supuesto, no un pronóstico. Solo hay tres ciclos completos, cada uno tuvo oscilaciones menores que el anterior, y nada obliga al próximo tramo a seguir a ninguno.",
+  "The combined line is the average of the selected cycles' percentage paths; the shaded band runs from the lowest to the highest of them.": "La línea combinada es el promedio de las trayectorias porcentuales de los ciclos seleccionados; la banda sombreada va de la más baja a la más alta.",
 };
 
 export default dict;

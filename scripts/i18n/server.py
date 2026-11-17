@@ -376,4 +376,8 @@ T = {
     'Completeness': ('Completitud', 'Completude'),
     'Values': ('Valores', 'Valores'),
     'Agreement': ('Concordancia', 'Concordância'),
+    # ── cycle repeat ──
+    "Each line is today's price moved day by day the way that cycle moved from day {d} after its own halving. Left of today it shows how that cycle would have arrived at the current price.": ('Cada línea es el precio de hoy movido día a día como se movió ese ciclo desde el día {d} tras su propio halving. A la izquierda de hoy muestra cómo ese ciclo habría llegado al precio actual.', 'Cada linha é o preço de hoje movido dia a dia como aquele ciclo se moveu a partir do dia {d} após o seu próprio halving. À esquerda de hoje mostra como aquele ciclo teria chegado ao preço atual.'),
+    'This is a what-if, not a forecast. There are only three completed cycles, each had smaller swings than the one before, and nothing obliges the next stretch to follow any of them.': ('Es un supuesto, no un pronóstico. Solo hay tres ciclos completos, cada uno tuvo oscilaciones menores que el anterior, y nada obliga al próximo tramo a seguir a ninguno.', 'É uma hipótese, não uma previsão. Há apenas três ciclos completos, cada um teve oscilações menores que o anterior, e nada obriga o próximo trecho a seguir algum deles.'),
+    "The combined line is the average of the selected cycles' percentage paths; the shaded band runs from the lowest to the highest of them.": ('La línea combinada es el promedio de las trayectorias porcentuales de los ciclos seleccionados; la banda sombreada va de la más baja a la más alta.', 'A linha combinada é a média das trajetórias percentuais dos ciclos selecionados; a faixa sombreada vai da mais baixa à mais alta.'),
 }

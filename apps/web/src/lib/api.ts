@@ -12,6 +12,9 @@ import type {
   LiquidationFeed,
   ModelsReport,
   LiquidationHeatmap,
+  CycleBack,
+  CycleRepeat,
+  CycleSpan,
   AnnotationPayload,
   RelationWindow,
   Relations,
@@ -65,6 +68,7 @@ export const api = {
   series: (tf: Timeframe, ids: string[]) => call<SeriesPayload>(`/api/series?tf=${tf}&ids=${ids.join(',')}`),
   liquidity: () => call<LiquidityReport>('/api/liquidity'),
   liquidationHeatmap: (window: HeatmapWindow) => call<LiquidationHeatmap>(`/api/liquidation-heatmap?window=${window}`),
+  cycleRepeat: (cycles: number[], span: CycleSpan, back: CycleBack) => call<CycleRepeat>(`/api/cycle-repeat?cycles=${cycles.join(',')}&span=${span}&back=${back}`),
   annotation: (tf: Timeframe, id: string) => call<AnnotationPayload>(`/api/annotations/${encodeURIComponent(id)}?tf=${tf}`),
   relations: (tf: Timeframe, window: RelationWindow, horizon: number, startYear: number) =>
     call<Relations>(`/api/relations?tf=${tf}&window=${window}&horizon=${horizon}&startYear=${startYear}`),

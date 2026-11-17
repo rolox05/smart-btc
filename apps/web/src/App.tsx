@@ -39,6 +39,7 @@ import { useLiveStream } from './hooks/useLiveStream';
 const BacktestPanel = lazy(() => import('./components/BacktestPanel').then((m) => ({ default: m.BacktestPanel })));
 const EventsPanel = lazy(() => import('./components/EventsPanel').then((m) => ({ default: m.EventsPanel })));
 const GuidePanel = lazy(() => import('./components/GuidePanel').then((m) => ({ default: m.GuidePanel })));
+const CycleRepeatView = lazy(() => import('./components/CycleRepeat').then((m) => ({ default: m.CycleRepeatView })));
 const LiquidationHeatmapView = lazy(() => import('./components/LiquidationHeatmap').then((m) => ({ default: m.LiquidationHeatmapView })));
 const LiquidityPanel = lazy(() => import('./components/LiquidityPanel').then((m) => ({ default: m.LiquidityPanel })));
 const LiveLiquidations = lazy(() => import('./components/LiveLiquidations').then((m) => ({ default: m.LiveLiquidations })));
@@ -357,6 +358,7 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
                   options={[
                     { value: 'chart', label: t('Price chart') },
                     { value: 'heatmap', label: t('Liquidation heatmap') },
+                    { value: 'cycle', label: t('Cycle repeat') },
                   ]}
                 />
               </div>
@@ -368,7 +370,9 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
             </header>
             <ErrorBoundary {...boundary} resetKey={`${state.center}:${tf}:${state.heatmapWindow}`}>
             <Suspense fallback={<div className="px-3"><Loading /></div>}>
-            {state.center === 'heatmap' ? (
+            {state.center === 'cycle' ? (
+              <CycleRepeatView prefs={state.cycle} onPrefs={(cycle) => patch({ cycle })} />
+            ) : state.center === 'heatmap' ? (
               heatmap.data ? (
                 <LiquidationHeatmapView heatmap={heatmap.data} window={state.heatmapWindow} onWindow={(heatmapWindow) => patch({ heatmapWindow })} loading={heatmap.isFetching && heatmap.data.window !== state.heatmapWindow} />
               ) : (

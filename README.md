@@ -144,6 +144,16 @@ with the browser closed:
 
 A rule that fires is sent to every channel that is switched on and shown in the app if it is open.
 
+## Cycle repeat (central panel)
+
+The third view of the central panel, next to the price chart and the liquidation heatmap. Past
+halving cycles (2012–2016, 2016–2020, 2020–2024) are lined up on their halving day; from today's
+day-in-cycle onwards each one's day-by-day percentage moves are applied to today's price. Pick any
+combination of cycles: each gets its own line, and with two or more a combined line (the geometric
+average of their paths) and a band from the lowest to the highest. Left of today the same lines show
+how each cycle would have arrived at the current price, and the table gives a resemblance figure
+(correlation of 30-day returns). It is a what-if on three cycles, not a forecast.
+
 ## Data sources
 
 | Source | Used for | Notes |

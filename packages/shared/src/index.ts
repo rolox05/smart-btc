@@ -1162,3 +1162,57 @@ export interface Overview {
   sources: SourceStatus[];
   history: { from: number; to: number; days: number };
 }
+
+// ───────────────────────── cycle repeat ─────────────────────────
+
+/** How far the replay runs past today (`halving` = to the estimated next halving), and how far back it is shown. */
+export const CYCLE_SPANS = ['6m', '1y', 'halving', '2y'] as const;
+export type CycleSpan = (typeof CYCLE_SPANS)[number];
+export const CYCLE_BACKS = ['6m', '1y', 'halving'] as const;
+export type CycleBack = (typeof CYCLE_BACKS)[number];
+
+/** One past halving cycle replayed from today's price. */
+export interface CyclePath {
+  /** 1 = the cycle that began with the 2012 halving, 2 = 2016, 3 = 2020. */
+  id: number;
+  /** Years the cycle ran, e.g. "2020–2024". */
+  label: string;
+  halving: number;
+  /** Today's price times how that cycle moved from the same day after its halving; aligned with `t`. */
+  values: (number | null)[];
+  /** Where the path stands at the end of the window, and its extremes after today. */
+  end: CyclePoint | null;
+  high: CyclePoint | null;
+  low: CyclePoint | null;
+  /** Correlation of 30-day returns between this cycle and the current one over the look-back (-1 to 1). */
+  match: number | null;
+}
+
+export interface CyclePoint {
+  t: number;
+  price: number;
+  /** Change from today's price, in %. */
+  pct: number;
+}
+
+export interface CycleRepeat {
+  asOf: number;
+  price: number;
+  /** Days since the last halving. */
+  cycleDay: number;
+  halving: number;
+  /** Estimated date of the next halving (1,458 days after the last one). */
+  nextHalving: number;
+  /** Daily times (unix seconds) from the look-back to the end of the projection. */
+  t: number[];
+  /** Index of today in `t`. */
+  today: number;
+  /** Actual closes up to today, then null. */
+  actual: (number | null)[];
+  cycles: CyclePath[];
+  /** Ids the combined path is built from. */
+  selected: number[];
+  /** Geometric average of the selected paths, with the lowest and highest of them at each day. */
+  average: { values: (number | null)[]; low: (number | null)[]; high: (number | null)[]; end: CyclePoint | null; high_: CyclePoint | null; low_: CyclePoint | null } | null;
+  notes: string[];
+}

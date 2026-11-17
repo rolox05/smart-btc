@@ -1,4 +1,4 @@
-import { DEFAULT_FORECAST_SETTINGS, pickLang, type ForecastSettings, type HeatmapWindow, type Lang, type MetricDef } from '@smart-btc/shared';
+import { DEFAULT_FORECAST_SETTINGS, pickLang, type CycleBack, type CycleSpan, type ForecastSettings, type HeatmapWindow, type Lang, type MetricDef } from '@smart-btc/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type TabId = 'forecast' | 'trade' | 'evidence' | 'events' | 'liquidity' | 'guide' | 'settings';
@@ -65,7 +65,9 @@ export interface AppState {
   /** Selected time view (one of VIEWS in App): it sets both the bar size and the stretch of history shown. */
   range: string;
   /** What the central panel shows. */
-  center: 'chart' | 'heatmap';
+  center: 'chart' | 'heatmap' | 'cycle';
+  /** Cycle-repeat chart: which past cycles are replayed, how far ahead and back, and the price scale. */
+  cycle: { cycles: number[]; span: CycleSpan; back: CycleBack; log: boolean };
   /** Stretch of history shown on the liquidation heatmap. */
   heatmapWindow: HeatmapWindow;
   /** Show explanations when hovering metrics and chart lines. */
@@ -99,6 +101,7 @@ export const DEFAULT_STATE: AppState = {
   layers: { cone: true, targets: true, swings: true, liquidations: false, walls: false, logScale: false, volume: true, levels: true },
   range: '1y',
   center: 'chart',
+  cycle: { cycles: [3], span: 'halving', back: '1y', log: true },
   heatmapWindow: '2w',
   explain: true,
   collapsedPanels: [],
@@ -134,6 +137,7 @@ function load(): AppState {
       ...MOVED_TABS[saved.tab as string],
       settings: pick(DEFAULT_STATE.settings, saved.settings),
       layers: pick(DEFAULT_STATE.layers, saved.layers),
+      cycle: pick(DEFAULT_STATE.cycle, saved.cycle),
       trade: pick(DEFAULT_STATE.trade, saved.trade),
       panelWidths: pick(DEFAULT_STATE.panelWidths, saved.panelWidths),
       // States saved before timeframes existed scored a fixed 10% touch level; start those on "automatic".

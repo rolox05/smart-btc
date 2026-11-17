@@ -92,7 +92,7 @@ function nativeMetrics(h: Arr, l: Arr, c: Arr, barsPerYear: number, series: Map<
   features.set('vol30', map(vol30, (a) => (a > 0 ? Math.log(a) : NaN)));
 }
 
-const HALVINGS = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'].map((d) => Date.parse(`${d}T00:00:00Z`) / 1000);
+export const HALVINGS = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'].map((d) => Date.parse(`${d}T00:00:00Z`) / 1000);
 
 /**
  * One price history from several exchanges. The first set that has data is the backbone; the others

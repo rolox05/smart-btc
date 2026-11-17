@@ -1,4 +1,4 @@
-import type { BacktestRequest, ForecastSettings, HeatmapWindow, RelationWindow, Timeframe, TradeSetupRequest } from '@smart-btc/shared';
+import type { BacktestRequest, CycleBack, CycleSpan, ForecastSettings, HeatmapWindow, RelationWindow, Timeframe, TradeSetupRequest } from '@smart-btc/shared';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '../lib/api';
 
@@ -130,3 +130,14 @@ export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api
 export const useNotificationLog = () => useQuery({ queryKey: ['notifications'], queryFn: api.notifications, retry, retryDelay });
 
 export const useAlerts = () => useQuery({ queryKey: ['alerts'], queryFn: api.alerts, retry, retryDelay });
+
+export const useCycleRepeat = (cycles: number[], span: CycleSpan, back: CycleBack, enabled: boolean) =>
+  useQuery({
+    queryKey: ['cycle-repeat', [...cycles].sort().join(','), span, back],
+    queryFn: () => api.cycleRepeat(cycles, span, back),
+    refetchInterval: 10 * 60_000,
+    enabled,
+    placeholderData: keepPreviousData,
+    retry,
+    retryDelay,
+  });
