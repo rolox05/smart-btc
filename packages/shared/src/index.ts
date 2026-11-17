@@ -74,7 +74,7 @@ export const TF_INFO: Record<Timeframe, TimeframeInfo> = {
     defaultRange: '3M', bracket: { stopPct: 2.5, takePct: 5 },
   },
   '1d': {
-    label: '24h', barSec: 86_400, barsPerYear: 365, horizons: [7, 14, 30, 60, 90], defaultHorizon: 30,
+    label: '24h', barSec: 86_400, barsPerYear: 365, horizons: [1, 7, 14, 30, 60, 90], defaultHorizon: 30,
     ranges: [{ id: '3M', bars: 92 }, { id: '6M', bars: 183 }, { id: '1Y', bars: 365 }, { id: '2Y', bars: 730 }, { id: '4Y', bars: 1461 }, { id: 'All', bars: 0 }],
     defaultRange: '1Y', bracket: { stopPct: 5, takePct: 10 },
   },

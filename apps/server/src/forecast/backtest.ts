@@ -248,7 +248,8 @@ export function runBacktest(ds: Dataset, prep: Prepared, req: BacktestRequest, t
   });
 
   const avgSkill = scores.reduce((a, sc) => a + sc.skill, 0) / scores.length;
-  const independent = Math.max(1, Math.round((evals * step) / H));
+  // Forecasts spaced wider than the horizon do not overlap, so each one counts once at most.
+  const independent = Math.max(1, Math.min(evals, Math.round((evals * step) / H)));
   const verdict: BacktestResult['verdict'] =
     avgSkill > 0.03
       ? {
