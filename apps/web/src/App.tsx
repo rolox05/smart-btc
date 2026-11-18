@@ -505,7 +505,15 @@ function Workspace({ state, patch }: Pick<ReturnType<typeof useAppState>, 'state
                     state.forecastView === 'odds' ? (
                       <OddsPanel forecast={f} />
                     ) : (
-                      <ForecastPanel forecast={f} backtest={backtest.error ? undefined : backtest.data} backtestPending={backtest.isFetching} onOpenBacktest={() => patch({ tab: 'evidence', evidenceView: 'backtest' })} />
+                      <ForecastPanel
+                        forecast={f}
+                        backtest={backtest.error ? undefined : backtest.data}
+                        backtestPending={backtest.isFetching}
+                        onOpenBacktest={() => patch({ tab: 'evidence', evidenceView: 'backtest' })}
+                        consensusPUp={todayOk?.pUp}
+                        onOpenModels={() => patch({ tab: 'evidence', evidenceView: 'models' })}
+                        metrics={metrics}
+                      />
                     )
                   }
                 </Async>

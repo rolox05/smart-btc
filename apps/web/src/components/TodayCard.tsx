@@ -14,9 +14,10 @@ const EDGE: Record<EdgeState, { label: string; tone: 'neutral' | 'warn' | 'good'
 };
 
 const SCENARIO: Record<TodayScenario['id'], { label: string; color: string }> = {
-  bull: { label: 'Bull', color: UI.up },
-  base: { label: 'Base', color: UI.mute },
-  bear: { label: 'Bear', color: UI.down },
+  // Same names as the scenarios in the forecast and models views, so the three read as one split.
+  bull: { label: msg('Rally'), color: UI.up },
+  base: { label: msg('Range'), color: UI.mute },
+  bear: { label: msg('Decline'), color: UI.down },
 };
 
 const WORD: Record<string, string> = {
@@ -81,7 +82,7 @@ export function TodayCard({ query, collapsed, onCollapsed }: Props) {
         <tbody>
           {[...s.scenarios].reverse().map((sc) => (
             <tr key={sc.id} className="border-t border-line">
-              <td className="w-12 py-1.5 font-medium" style={{ color: SCENARIO[sc.id].color }}>{t(SCENARIO[sc.id].label)}</td>
+              <td className="w-16 py-1.5 font-medium" style={{ color: SCENARIO[sc.id].color }}>{t(SCENARIO[sc.id].label)}</td>
               <td className="num w-10 py-1.5 text-right text-ink">{fmtProb(sc.probability)}</td>
               <td className="w-[30%] px-2 py-1.5"><ProbBar value={sc.probability} base={sc.baseProbability ?? undefined} color={SCENARIO[sc.id].color} /></td>
               <td className="num py-1.5 text-right text-ink2">

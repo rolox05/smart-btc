@@ -37,6 +37,8 @@ const signed = (x: number, digits = Math.abs(x) < 1 ? 2 : 1) => `${x >= 0 ? '+' 
 const LADDER = [1, 2, 3, 4, 6, 8, 10, 12];
 /** The fan chart is sampled at no more than this many points. */
 const MAX_CONE_POINTS = 60;
+/** A scenario this far (in probability) from its base rate is worth leading the headline with. */
+const TILT = 0.03;
 
 /** A set of historical start bars with weights and volatility scaling - either the analogs or the base rate. */
 export interface Sample {
@@ -465,17 +467,36 @@ export function runForecast(ds: Dataset, prep: Prepared, s: ForecastSettings, tr
   const firstT = ds.t[Math.min(...nb.idx)];
   const lastT = ds.t[Math.max(...nb.idx)];
 
-  const top = scenarios[0];
+  // Lead with what today's readings change, not with the most common outcome: a rally is the most
+  // frequent 30-day result in BTC's history, so "most likely: rally" on its own says nothing.
   const b60 = bands[1];
+  const pc = (x: number) => Math.round(x * 100);
+  const shift = (x: Scenario) => x.probability - x.baseProbability;
+  const byShift = [...scenarios].sort((a, b) => shift(b) - shift(a));
+  const up = byShift[0];
+  const down = byShift[byShift.length - 1];
+  const inOrder = (['rally', 'range', 'decline'] as const).map((id) => scenarios.find((x) => x.id === id)!);
+  const odds = inOrder.map((x) => `${x.label.toLowerCase()} ${pc(x.probability)}%`).join(', ');
+  const usual = inOrder.map((x) => `${pc(x.baseProbability)}%`).join(' / ');
+  const target = (x: Scenario) =>
+    x.id === 'range'
+      ? tr(', ending within ±{t}% of the current price, around {price}', { t: T, price: usd(x.targetPrice) })
+      : tr(', median target {price} ({pct})', { price: usd(x.targetPrice), pct: signed(x.targetPct) }) +
+        (x.daysToExtreme ? tr(x.id === 'rally' ? ', typically peaking about {dur} in' : ', typically bottoming about {dur} in', { dur: dur(x.daysToExtreme) }) : '');
   const headline =
-    tr('Most likely over the next {dur}: {scenario} ({p}%)', { dur: dur(H), scenario: top.label.toLowerCase(), p: Math.round(top.probability * 100) }) +
-    (top.id === 'range'
-      ? tr(', ending within ±{t}% of the current price, around {price}.', { t: T, price: usd(top.targetPrice) })
-      : tr(', median target {price} ({pct})', { price: usd(top.targetPrice), pct: signed(top.targetPct) }) +
-        (top.daysToExtreme
-          ? tr(top.id === 'rally' ? ', typically peaking about {dur} in' : ', typically bottoming about {dur} in', { dur: dur(top.daysToExtreme) })
-          : '') +
-        '.') +
+    (shift(up) >= TILT
+      ? tr('Over the next {dur} the analogs lean toward a {scenario}: {p}% against {base}% usually', {
+          dur: dur(H), scenario: up.label.toLowerCase(), p: pc(up.probability), base: pc(up.baseProbability),
+        }) + target(up) + '.'
+      : -shift(down) >= TILT
+        ? tr('Over the next {dur} the analogs make a {scenario} less likely than usual: {p}% against {base}%.', {
+            dur: dur(H), scenario: down.label.toLowerCase(), p: pc(down.probability), base: pc(down.baseProbability),
+          })
+        : tr('Close to the usual odds over the next {dur}: {odds} (usually {usual}).', {
+            dur: dur(H),
+            odds,
+            usual,
+          })) +
     tr(' 60% of modelled outcomes end between {low} and {high}.', { low: usd(b60.lowPrice), high: usd(b60.highPrice) });
 
   return {

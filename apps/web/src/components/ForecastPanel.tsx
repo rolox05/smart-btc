@@ -1,9 +1,9 @@
-import { TF_INFO, type BacktestResult, type ForecastResult, type ForecastSettings, type Scenario, type Timeframe } from '@smart-btc/shared';
+import { TF_INFO, type BacktestResult, type FeatureUse, type ForecastResult, type ForecastSettings, type MetricDef, type Scenario, type Timeframe } from '@smart-btc/shared';
 import clsx from 'clsx';
 import { ChevronDown, Minus, SlidersHorizontal, TrendingDown, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
-import { fmtBarTime, fmtBars, fmtPct, fmtPctAuto, fmtProb, fmtUsd } from '../lib/format';
-import { useT } from '../lib/i18n';
+import { fmtBarTime, fmtBars, fmtMetric, fmtPct, fmtPctAuto, fmtProb, fmtUsd } from '../lib/format';
+import { msg, useT } from '../lib/i18n';
 import { UI } from '../lib/palette';
 import { Badge, Card, Note, NumberField, ProbBar, Segmented, Switch, Td, Th } from './ui';
 
@@ -80,7 +80,10 @@ function ScenarioCard({ s, top, horizon, tf }: { s: Scenario; top: boolean; hori
         <ProbBar value={s.probability} base={s.baseProbability} color={color} />
       </div>
       <div className="num mt-1 text-[11px] text-mute">
-        {t('Base rate {p} ({delta} pts)', { p: fmtProb(s.baseProbability), delta: `${delta >= 0 ? '+' : ''}${delta.toFixed(0)}` })}
+        {t('Usually {p}', { p: fmtProb(s.baseProbability) })} ·{' '}
+        <span className={clsx(Math.abs(delta) >= 3 && 'font-medium text-ink')}>
+          {Math.round(delta) === 0 ? t('same as usual') : t('{delta} pts', { delta: `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(0)}` })}
+        </span>
       </div>
       <dl className="num mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <dt className="text-mute">{t('Median target')}</dt>
@@ -114,7 +117,53 @@ function ScenarioCard({ s, top, horizon, tf }: { s: Scenario; top: boolean; hori
   );
 }
 
-export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBacktest }: { forecast: ForecastResult; backtest?: BacktestResult; backtestPending: boolean; onOpenBacktest: () => void }) {
+/** How unusual a reading is, in words, from its distance to its own historical average. */
+function unusual(z: number): { word: string; strong: boolean } {
+  const a = Math.abs(z);
+  if (a < 0.5) return { word: msg('typical'), strong: false };
+  if (a < 1.5) return { word: z > 0 ? msg('above normal') : msg('below normal'), strong: false };
+  if (a < 2.5) return { word: z > 0 ? msg('far above normal') : msg('far below normal'), strong: true };
+  return { word: z > 0 ? msg('extreme high') : msg('extreme low'), strong: true };
+}
+
+function Reading({ f, def }: { f: FeatureUse; def?: MetricDef }) {
+  const { t } = useT();
+  const z = Math.max(-3, Math.min(3, f.z));
+  const u = unusual(f.z);
+  return (
+    <div className="text-xs" title={t('{z} standard deviations from its historical average', { z: f.z.toFixed(2) })}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-ink2">{def?.name ?? f.name}</span>
+        <span className="num shrink-0 font-medium text-ink">{def ? fmtMetric(f.value, def.unit) : f.value.toFixed(2)}</span>
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <div className="relative h-1.5 flex-1 rounded-full bg-raised">
+          <div className="absolute left-1/2 top-[-2px] h-2.5 w-px bg-mute" />
+          <div
+            className={clsx('absolute top-0 h-full rounded-full', u.strong ? 'bg-warn' : 'bg-accent')}
+            style={z >= 0 ? { left: '50%', width: `${(z / 3) * 50}%` } : { right: '50%', width: `${(-z / 3) * 50}%` }}
+          />
+        </div>
+        <span className={clsx('num w-40 shrink-0 whitespace-nowrap text-right text-[11px]', u.strong ? 'text-warn' : 'text-mute')}>
+          {t(u.word)} · {f.z >= 0 ? '+' : '−'}{Math.abs(f.z).toFixed(1)}σ
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface PanelProps {
+  forecast: ForecastResult;
+  backtest?: BacktestResult;
+  backtestPending: boolean;
+  onOpenBacktest: () => void;
+  /** Chance of a higher price from all three models together (the Today card), at the same horizon. */
+  consensusPUp?: number;
+  onOpenModels: () => void;
+  metrics?: MetricDef[];
+}
+
+export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBacktest, consensusPUp, onOpenModels, metrics }: PanelProps) {
   const { t, dur: durOf } = useT();
   const [showAnalogs, setShowAnalogs] = useState(false);
   const H = forecast.settings.horizon;
@@ -122,11 +171,41 @@ export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBackt
   const dur = durOf(tf, H);
   const verdictTone = backtest?.verdict.label === 'measurable edge' ? 'good' : backtest?.verdict.label === 'weak edge' ? 'warn' : 'crit';
   const matchTone = forecast.confidence.label === 'good' ? 'good' : forecast.confidence.label === 'moderate' ? 'warn' : 'crit';
+  const defs = new Map((metrics ?? []).map((m) => [m.id, m]));
 
   return (
     <div className="flex flex-col gap-3">
-      <Card title={t('Outlook · next {dur} · {tf} bars', { dur, tf: TF_INFO[tf].label })} right={<span className="num text-[11px] text-mute">{t('as of {time}', { time: fmtBarTime(forecast.asOf, tf) })} · {fmtUsd(forecast.price)}</span>}>
+      <Card title={t('Analog outlook · next {dur} · {tf} bars', { dur, tf: TF_INFO[tf].label })} right={<span className="num text-[11px] text-mute">{t('as of {time}', { time: fmtBarTime(forecast.asOf, tf) })} · {fmtUsd(forecast.price)}</span>}>
         <p className="text-[13px] leading-relaxed text-ink">{forecast.headline}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {backtest ? (
+            <Badge tone={verdictTone} title={backtest.verdict.text}>{t('Backtest: {v}', { v: t(backtest.verdict.label) })}</Badge>
+          ) : backtestPending ? (
+            <Badge>{t('Backtest running…')}</Badge>
+          ) : null}
+          <Badge tone={matchTone} title={forecast.confidence.notes.join(' ')}>{t('Historical match: {v}', { v: t(forecast.confidence.label) })}</Badge>
+        </div>
+        {consensusPUp != null && (
+          <div className="mt-2">
+            {Math.abs(forecast.terminal.probUp - consensusPUp) < 0.05 ? (
+              <p className="text-[11px] leading-relaxed text-mute">
+                {t('This view is the analog model alone. All three models together (the Today card) agree: {c} chance of a higher price after {dur}.', { c: fmtProb(consensusPUp), dur })}
+              </p>
+            ) : (
+              <Note tone="warn">
+                {t(
+                  forecast.terminal.probUp > consensusPUp
+                    ? 'This view is the analog model alone, and it is more bullish than all three models together: {a} against {c} chance of a higher price after {dur}. The Today card uses all three.'
+                    : 'This view is the analog model alone, and it is more bearish than all three models together: {a} against {c} chance of a higher price after {dur}. The Today card uses all three.',
+                  { a: fmtProb(forecast.terminal.probUp), c: fmtProb(consensusPUp), dur },
+                )}{' '}
+                <button onClick={onOpenModels} className="text-[#7fb2f0] underline-offset-2 hover:underline">
+                  {t('Compare the models')}
+                </button>
+              </Note>
+            )}
+          </div>
+        )}
 
         <div className="mt-3 flex flex-col gap-2">
           {forecast.scenarios.map((s, i) => (
@@ -134,7 +213,7 @@ export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBackt
           ))}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-mute">
-          {t("Scenarios split the outcome at ±{t}% after {dur}. The white tick on each bar is the base rate: how often that outcome happened across all history, regardless of today's readings.", { t: forecast.thresholdPct, dur })}
+          {t("Scenarios split the outcome at ±{t}% after {dur}. The white tick on each bar, and \"usually\", is how often that outcome happened across all history, regardless of today's readings.", { t: forecast.thresholdPct, dur })}
         </p>
       </Card>
 
@@ -190,26 +269,18 @@ export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBackt
           </tbody>
         </table>
         <div className="num mt-2 grid grid-cols-3 gap-2 text-xs">
-          <div className="rounded-md bg-raised px-2 py-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-mute">{t('P(higher)')}</div>
-            <div className="font-semibold text-ink">
-              {fmtProb(forecast.terminal.probUp)} <span className="font-normal text-mute">{t('vs {x}', { x: fmtProb(forecast.base.probUp) })}</span>
+          {[
+            { label: t('Chance higher'), value: fmtProb(forecast.terminal.probUp), usual: fmtProb(forecast.base.probUp) },
+            { label: t('Median'), value: fmtPct(forecast.terminal.p50), usual: fmtPct(forecast.base.p50) },
+            { label: t('Mean'), value: fmtPct(forecast.terminal.mean), usual: fmtPct(forecast.base.mean) },
+          ].map((x) => (
+            <div key={x.label} className="rounded-md bg-raised px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-mute">{x.label}</div>
+              <div className="font-semibold text-ink">{x.value}</div>
+              <div className="text-[10.5px] text-mute">{t('usually {x}', { x: x.usual })}</div>
             </div>
-          </div>
-          <div className="rounded-md bg-raised px-2 py-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-mute">{t('Median')}</div>
-            <div className="font-semibold text-ink">
-              {fmtPct(forecast.terminal.p50)} <span className="font-normal text-mute">{t('vs {x}', { x: fmtPct(forecast.base.p50) })}</span>
-            </div>
-          </div>
-          <div className="rounded-md bg-raised px-2 py-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-mute">{t('Mean')}</div>
-            <div className="font-semibold text-ink">
-              {fmtPct(forecast.terminal.mean)} <span className="font-normal text-mute">{t('vs {x}', { x: fmtPct(forecast.base.mean) })}</span>
-            </div>
-          </div>
+          ))}
         </div>
-        <p className="mt-1.5 text-[11px] text-mute">{t('"vs" figures are the base rate.')}</p>
       </Card>
 
       <Card title={t("Today's readings used by the model")}>
@@ -220,26 +291,15 @@ export function ForecastPanel({ forecast, backtest, backtestPending, onOpenBackt
             </Note>
           </div>
         )}
-        <div className="flex flex-col gap-1.5">
-          {forecast.featuresUsed.map((f) => {
-            const z = Math.max(-3, Math.min(3, f.z));
-            return (
-              <div key={f.id} className="flex items-center gap-2 text-xs" title={t('{z} standard deviations from its historical average', { z: f.z.toFixed(2) })}>
-                <span className="w-28 shrink-0 truncate text-ink2">{f.name}</span>
-                <div className="relative h-1.5 flex-1 rounded-full bg-raised">
-                  <div className="absolute left-1/2 top-[-2px] h-2.5 w-px bg-mute" />
-                  <div
-                    className="absolute top-0 h-full rounded-full bg-accent"
-                    style={z >= 0 ? { left: '50%', width: `${(z / 3) * 50}%` } : { right: '50%', width: `${(-z / 3) * 50}%` }}
-                  />
-                </div>
-                <span className="num w-14 shrink-0 text-right text-mute">{f.z >= 0 ? '+' : ''}{f.z.toFixed(1)}σ</span>
-              </div>
-            );
-          })}
+        <div className="flex flex-col gap-2.5">
+          {[...forecast.featuresUsed]
+            .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+            .map((f) => (
+              <Reading key={f.id} f={f} def={defs.get(f.id)} />
+            ))}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-mute">
-          {t('Bars show how unusual each reading is versus its own history. The model searches {cand} past bars for the {k} most similar combinations.', { cand: forecast.sample.candidates.toLocaleString('en-US'), k: forecast.sample.neighbors })}
+          {t('Most unusual first. Each bar shows how far the reading sits from its own historical average, in standard deviations (σ). The model searches {cand} past bars for the {k} where the same combination occurred most closely.', { cand: forecast.sample.candidates.toLocaleString('en-US'), k: forecast.sample.neighbors })}
         </p>
         <button
           onClick={() => setShowAnalogs(!showAnalogs)}
