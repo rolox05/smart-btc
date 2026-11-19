@@ -62,6 +62,25 @@ const HEAT_LEVERAGE: [lev: number, share: number][] = [
   [125, 0.06],
 ];
 
+/** Points across a bar's range where its new positions are assumed to be entered. */
+const ENTRY_POINTS = [0.1, 0.3, 0.5, 0.7, 0.9];
+
+/**
+ * Entry prices and weights for one bar: spread over its high-low range, heavier near the typical price
+ * (where most of the volume trades) and never zero at the extremes.
+ */
+export function entryMix(h: number, l: number, c: number): [price: number, weight: number][] {
+  const typical = (h + l + c) / 3;
+  const range = h - l;
+  if (!(range > 0)) return [[typical, 1]];
+  const pts = ENTRY_POINTS.map((q) => {
+    const p = l + range * q;
+    return [p, Math.max(0.15, 1 - Math.abs(p - typical) / range)] as [number, number];
+  });
+  const sum = pts.reduce((s, [, w]) => s + w, 0);
+  return pts.map(([p, w]) => [p, w / sum]);
+}
+
 /** Bar size and number of columns used for each heatmap window. */
 const HEAT_WINDOWS: Record<HeatmapWindow, { tf: '15m' | '1h' | '4h' | '1d' | '1w'; cols: number }> = {
   '12h': { tf: '15m', cols: 48 },
@@ -205,15 +224,18 @@ export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset, dai
     // Price trading through a level liquidates it: longs at or above the low, shorts at or below the high.
     for (let r = Math.max(0, rowOf(ds.l[i])); r < R; r++) longs[r] = 0;
     for (let r = Math.min(R - 1, rowOf(ds.h[i])); r >= 0; r--) shorts[r] = 0;
-    // New positions, entered around the bar's typical price, half long and half short.
-    const entry = (ds.h[i] + ds.l[i] + ds.c[i]) / 3;
+    // New positions, half long and half short, entered across the bar's traded range (weighted toward its
+    // typical price) rather than at one price: levels from bars that overlap pile up into thick bands where
+    // price spent time, the way real clusters form, instead of one thin line per bar and leverage tier.
     const usd = opened[i] * 0.5;
     if (usd > 0) {
-      for (const [lev, share] of HEAT_LEVERAGE) {
-        const rl = rowOf(liquidationPrice(entry, lev, 'long'));
-        const rs = rowOf(liquidationPrice(entry, lev, 'short'));
-        if (rl >= 0 && rl < R) longs[rl] += usd * share;
-        if (rs >= 0 && rs < R) shorts[rs] += usd * share;
+      for (const [entry, w] of entryMix(ds.h[i], ds.l[i], ds.c[i])) {
+        for (const [lev, share] of HEAT_LEVERAGE) {
+          const rl = rowOf(liquidationPrice(entry, lev, 'long'));
+          const rs = rowOf(liquidationPrice(entry, lev, 'short'));
+          if (rl >= 0 && rl < R) longs[rl] += usd * share * w;
+          if (rs >= 0 && rs < R) shorts[rs] += usd * share * w;
+        }
       }
     }
     if (i >= first) {
@@ -233,7 +255,7 @@ export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset, dai
   for (let i = first; i < ds.n; i++) candles.push({ t: ds.t[i], o: ds.o[i], h: ds.h[i], l: ds.l[i], c: ds.c[i], v: ds.v[i] });
 
   const notes = [
-    t('An estimate, not exchange data: new positions are inferred from rising open interest (Binance at the bar size for the last 30 days, daily Bybit open interest before that), split evenly between longs and shorts and across an assumed leverage mix of 5× to 125×.'),
+    t('An estimate, not exchange data: new positions are inferred from rising open interest (Binance at the bar size for the last 30 days, daily Bybit open interest before that), split evenly between longs and shorts, entered across the range each bar traded and spread over an assumed leverage mix of 5× to 125×.'),
     t('A level is drawn from the bar its positions were opened until price trades through it. Only positions opened inside the chosen window are counted, so the map starts empty on the left; pick a longer window to see older levels.'),
   ];
   if (fallbackShare > 0.5) notes.push(t('No open-interest history covers most of this window, so new positions are estimated from traded volume alone.'));
