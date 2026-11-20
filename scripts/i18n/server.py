@@ -220,9 +220,9 @@ T = {
         'Una estimación, no datos del exchange: las posiciones nuevas se infieren de los aumentos del interés abierto (Binance al tamaño de vela en los últimos 30 días, interés abierto diario de Bybit antes), repartidas por igual entre largos y cortos, abiertas a lo largo del rango de cada vela y distribuidas entre una mezcla de apalancamiento supuesta de 5× a 125×.',
         'Uma estimativa, não dados da corretora: as posições novas são inferidas dos aumentos dos contratos em aberto (Binance no tamanho da vela nos últimos 30 dias, contratos em aberto diários da Bybit antes disso), divididas igualmente entre comprados e vendidos, abertas ao longo da faixa de cada vela e distribuídas entre um mix de alavancagem suposto de 5× a 125×.',
     ),
-    'A level is drawn from the bar its positions were opened until price trades through it. Only positions opened inside the chosen window are counted, so the map starts empty on the left; pick a longer window to see older levels.': (
-        'Un nivel se dibuja desde la vela en que se abrieron sus posiciones hasta que el precio lo atraviesa. Solo se cuentan las posiciones abiertas dentro del periodo elegido, así que el mapa empieza vacío a la izquierda; elige un periodo más largo para ver niveles más antiguos.',
-        'Um nível é desenhado desde a vela em que suas posições foram abertas até o preço atravessá-lo. Só contam as posições abertas dentro da janela escolhida, então o mapa começa vazio à esquerda; escolha uma janela mais longa para ver níveis mais antigos.',
+    'A level is drawn from the bar its positions were opened until price trades through it. Positions opened before the chosen window that price has not reached yet are already on the map at its left edge.': (
+        'Un nivel se dibuja desde la vela en que se abrieron sus posiciones hasta que el precio lo atraviesa. Las posiciones abiertas antes del periodo elegido que el precio aún no ha alcanzado ya aparecen en el borde izquierdo del mapa.',
+        'Um nível é desenhado desde a vela em que suas posições foram abertas até o preço atravessá-lo. As posições abertas antes da janela escolhida que o preço ainda não alcançou já aparecem na borda esquerda do mapa.',
     ),
     'No open-interest history covers most of this window, so new positions are estimated from traded volume alone.': (
         'No hay historial de interés abierto para la mayor parte de este periodo, así que las posiciones nuevas se estiman solo a partir del volumen negociado.',

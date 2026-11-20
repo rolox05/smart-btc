@@ -181,9 +181,11 @@ async function positionFlows(ds: Dataset, daily: Dataset, tf: string, start: num
 export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset, daily: Dataset, t: T = EN): Promise<LiquidationHeatmap> {
   const spec = HEAT_WINDOWS[window];
   const first = Math.max(0, ds.n - spec.cols);
-  // Like Coinglass, only positions opened inside the window are drawn: the map starts empty on the left
-  // and every band begins at the bar its positions were opened.
-  const start = first;
+  // The replay starts well before the window (one more window, and at least 30 days), so levels opened
+  // earlier and still standing are on the map from its first column instead of leaving the left side,
+  // where short windows draw their candles, empty.
+  const warmup = Math.max(spec.cols, Math.round((30 * 86_400) / ds.barSec));
+  const start = Math.max(0, first - warmup);
   const cols = ds.n - first;
   const flows = await positionFlows(ds, daily, spec.tf, start);
   const { fallbackShare } = flows;
@@ -256,7 +258,7 @@ export async function liquidationHeatmap(window: HeatmapWindow, ds: Dataset, dai
 
   const notes = [
     t('An estimate, not exchange data: new positions are inferred from rising open interest (Binance at the bar size for the last 30 days, daily Bybit open interest before that), split evenly between longs and shorts, entered across the range each bar traded and spread over an assumed leverage mix of 5× to 125×.'),
-    t('A level is drawn from the bar its positions were opened until price trades through it. Only positions opened inside the chosen window are counted, so the map starts empty on the left; pick a longer window to see older levels.'),
+    t('A level is drawn from the bar its positions were opened until price trades through it. Positions opened before the chosen window that price has not reached yet are already on the map at its left edge.'),
   ];
   if (fallbackShare > 0.5) notes.push(t('No open-interest history covers most of this window, so new positions are estimated from traded volume alone.'));
 
