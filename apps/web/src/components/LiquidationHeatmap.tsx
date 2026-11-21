@@ -91,6 +91,8 @@ const signedPct = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(
 type PriceStyle = 'candles' | 'line' | 'off';
 type Prefs = { lo: number; hi: number; showMap: boolean; keyLevels: boolean; keyRange: number; price: PriceStyle };
 const DEFAULT_PREFS: Prefs = { lo: DEFAULT_LO, hi: DEFAULT_HI, showMap: true, keyLevels: true, keyRange: 3, price: 'candles' };
+/** Narrowest slot a candle gets; thinner columns are merged into one candle per slot. */
+const MIN_CANDLE_PX = 3;
 const PREFS_KEY = 'smart-btc:heatmap:v1';
 
 function loadPrefs(): Prefs {
@@ -358,9 +360,10 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
       }
     }
 
-    // Price on top: candles, a line of closes (also when columns get thinner than a pixel), or nothing.
-    const asLine = prefs.price === 'line' || (prefs.price === 'candles' && colW < 1.5);
-    if (prefs.price !== 'off' && asLine) {
+    // Price on top: candles, a line of closes, or nothing. Candles stay candles on every window: when columns
+    // get too thin to show one, neighbouring bars are merged into one candle (open of the first, close of the
+    // last, the extremes in between), grouped from the start of the data so the candles hold still while panning.
+    if (prefs.price === 'line') {
       const path = () => {
         ctx.beginPath();
         for (let c = Math.max(0, cFrom - 1); c <= Math.min(cols - 1, cTo + 1); c++) {
@@ -379,18 +382,29 @@ export function LiquidationHeatmapView({ heatmap, window: windowId, onWindow, lo
       path();
       ctx.stroke();
     } else if (prefs.price === 'candles') {
-      const bodyW = Math.max(1, Math.min(12, colW * 0.6));
-      for (let c = cFrom; c <= cTo; c++) {
-        const k = heatmap.candles[c];
-        const x = xOf(c);
-        const up = k.c >= k.o;
-        const top = yOf(Math.max(k.o, k.c));
-        const bot = yOf(Math.min(k.o, k.c));
+      const group = Math.max(1, Math.ceil(MIN_CANDLE_PX / colW));
+      const slotW = colW * group;
+      const bodyW = Math.max(1, Math.min(12, slotW * 0.6));
+      const wick = slotW >= 6 ? 1 : 0.75;
+      for (let g = Math.floor(cFrom / group) * group; g <= cTo; g += group) {
+        const end = Math.min(cols - 1, g + group - 1);
+        const o = heatmap.candles[g].o;
+        const c = heatmap.candles[end].c;
+        let h = -Infinity;
+        let l = Infinity;
+        for (let i = g; i <= end; i++) {
+          h = Math.max(h, heatmap.candles[i].h);
+          l = Math.min(l, heatmap.candles[i].l);
+        }
+        const x = (xOf(g) + xOf(end)) / 2;
+        const up = c >= o;
+        const top = yOf(Math.max(o, c));
+        const bot = yOf(Math.min(o, c));
         ctx.strokeStyle = up ? UI.up : UI.down;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = wick;
         ctx.beginPath();
-        ctx.moveTo(x, yOf(k.h));
-        ctx.lineTo(x, yOf(k.l));
+        ctx.moveTo(x, yOf(h));
+        ctx.lineTo(x, yOf(l));
         ctx.stroke();
         ctx.fillStyle = up ? UI.up : UI.down;
         ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bot - top));
